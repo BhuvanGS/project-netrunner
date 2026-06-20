@@ -17,8 +17,11 @@ interface ConsoleLayoutProps {
   isLoading: boolean;
   error: string | null;
   graph: ArchitectureGraph;
-  handleAnalyze: (url?: string) => void;
+  handleAnalyze: (url?: string, force?: boolean) => void;
   onJackIn: () => void;
+  icePending: string | null;
+  onConfirmIce: () => void;
+  onCancelIce: () => void;
 }
 
 export function ConsoleLayout({
@@ -29,6 +32,9 @@ export function ConsoleLayout({
   graph,
   handleAnalyze,
   onJackIn,
+  icePending,
+  onConfirmIce,
+  onCancelIce,
 }: ConsoleLayoutProps) {
   const [ip, setIp] = useState('detecting...');
   const [temp, setTemp] = useState(42.0);
@@ -36,8 +42,12 @@ export function ConsoleLayout({
   const [logs, setLogs] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
-  const [history, setHistory] = useState<{ type: 'in' | 'out'; text: string; color?: string }[]>([]);
+  const [history, setHistory] = useState<{ type: 'in' | 'out'; text: string; color?: string }[]>(
+    []
+  );
   const [input, setInput] = useState('');
+  const [cursorPos, setCursorPos] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Detect public IP
   useEffect(() => {
@@ -73,10 +83,15 @@ export function ConsoleLayout({
       () => `[CPU] Load: ${(Math.random() * 30 + 5).toFixed(1)}%`,
       () => `[NET] Packets: ${Math.floor(Math.random() * 9000 + 1000)}`,
       () =>
-        `[SEC] Handshake: 0x${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')}`,
+        `[SEC] Handshake: 0x${Math.floor(Math.random() * 0xffffff)
+          .toString(16)
+          .padStart(6, '0')}`,
       () => `[SYS] Thread ${Math.floor(Math.random() * 16)} active`,
       () => `[DMA] Buffer: ${Math.floor(Math.random() * 256)}KB`,
-      () => `[IRQ] Vector: 0x${Math.floor(Math.random() * 255).toString(16).padStart(2, '0')}`,
+      () =>
+        `[IRQ] Vector: 0x${Math.floor(Math.random() * 255)
+          .toString(16)
+          .padStart(2, '0')}`,
       () => `[CLK] Cycle: ${Math.floor(Math.random() * 999999999)}`,
       () => `[ICE] Bypass: ${Math.random() > 0.8 ? 'DETECTED' : 'CLEAR'}`,
       () => `[ROUTER] Hop: ${Math.floor(Math.random() * 12 + 1)}`,
@@ -106,7 +121,11 @@ export function ConsoleLayout({
   // Boot + help on mount
   useEffect(() => {
     const bootLines: { type: 'out'; text: string; color?: string }[] = [
-      { type: 'out', text: '[BOOT] Netrunner OS v2.1.0 — kernel initialized', color: 'text-red-400/40' },
+      {
+        type: 'out',
+        text: '[BOOT] Netrunner OS v2.1.0 — kernel initialized',
+        color: 'text-red-400/40',
+      },
       { type: 'out', text: '[BOOT] Neural link handshake complete', color: 'text-red-400/40' },
       { type: 'out', text: '[BOOT] Architecture parser loaded', color: 'text-red-400/40' },
       { type: 'out', text: '[BOOT] Waiting for target repository...', color: 'text-red-400/40' },
@@ -129,24 +148,68 @@ export function ConsoleLayout({
       pushOut(`[ERROR] ${error}`, 'text-rose-400');
     }
   }, [error]);
+
+  // ICE warning banner when a private repo is detected
+  const prevIceRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isLoading && graph !== mockArchitectureGraph) {
+    if (icePending && icePending !== prevIceRef.current) {
+      const shortUrl = icePending.replace('https://github.com/', '');
+      pushOut('', '');
+      pushOut('╔══════════════════════════════════════════════════╗', 'text-red-500/50');
+      pushOut('║  [ICE] INTRUSION COUNTERMEASURES ELECTRONICS      ║', 'text-red-500/50');
+      pushOut('╚══════════════════════════════════════════════════╝', 'text-red-500/50');
+      pushOut(`Target: ${shortUrl}`, 'text-red-300/70');
+      pushOut('Status: PRIVATE — Authentication barrier detected', 'text-red-300/70');
+      pushOut('', '');
+      pushOut('[WARN] Jacking private repository. Unauthorized access carries risk.', 'text-amber-400/70');
+      pushOut('[PROMPT] Confirm breach? Type "y" or "confirm" to proceed.', 'text-amber-400/70');
+      prevIceRef.current = icePending;
+    }
+    if (!icePending) {
+      prevIceRef.current = null;
+    }
+  }, [icePending]);
+
+  const prevIsLoadingRef = useRef(false);
+  useEffect(() => {
+    const wasLoading = prevIsLoadingRef.current;
+    const nowLoading = isLoading;
+    prevIsLoadingRef.current = nowLoading;
+
+    if (!wasLoading && nowLoading) {
+      // Analysis just started
+      const shortUrl = repoUrl.replace('https://github.com/', '');
+      pushOut(`[WORK] Analyzing ${shortUrl}...`, 'text-amber-400/70');
+    } else if (wasLoading && !nowLoading && !error && graph !== mockArchitectureGraph) {
+      // Analysis just finished successfully
+      const shortUrl = repoUrl.replace('https://github.com/', '');
       pushOut(
-        `[OK] Analysis complete — ${graph.stats.totalFiles} files, ${graph.stats.totalNodes} nodes, ${graph.stats.totalEdges} edges`,
+        `[OK] ${shortUrl} — Analysis complete — ${graph.stats.totalFiles} files, ${graph.stats.totalNodes} nodes, ${graph.stats.totalEdges} edges`,
         'text-green-400/70'
       );
       pushOut('[INFO] Type `jackin` or `netrn jackin` to enter cyberspace', 'text-amber-400/70');
     }
-  }, [graph, isLoading]);
+  }, [isLoading, graph, repoUrl, error]);
 
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  const platform = typeof navigator !== 'undefined' ? navigator.platform : 'unknown';
-  const browser =
-    typeof navigator !== 'undefined'
-      ? navigator.userAgent.split(' ').pop()?.split('/')[0] ?? 'unknown'
-      : 'unknown';
-  const width = typeof window !== 'undefined' ? window.innerWidth : 0;
-  const height = typeof window !== 'undefined' ? window.innerHeight : 0;
+  const [clientInfo, setClientInfo] = useState({
+    hostname: 'localhost',
+    platform: 'unknown',
+    browser: 'unknown',
+    width: 0,
+    height: 0,
+  });
+
+  useEffect(() => {
+    setClientInfo({
+      hostname: window.location.hostname,
+      platform: navigator.platform,
+      browser: navigator.userAgent.split(' ').pop()?.split('/')[0] ?? 'unknown',
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  }, []);
+
+  const { hostname, platform, browser, width, height } = clientInfo;
 
   const formatUptime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -167,15 +230,28 @@ export function ConsoleLayout({
     const parts = trimmed.split(/\s+/);
     const base = parts[0];
 
+    // ICE confirmation takes priority when pending
+    if (icePending) {
+      if (base === 'y' || base === 'yes' || trimmed === 'confirm') {
+        pushOut('[ICE] Breach confirmed. Bypassing authentication...', 'text-rose-400');
+        onConfirmIce();
+        return;
+      }
+      if (base === 'n' || base === 'no' || trimmed === 'cancel') {
+        pushOut('[ICE] Breach aborted. Connection severed.', 'text-slate-500');
+        onCancelIce();
+        return;
+      }
+      pushOut('[ICE] Awaiting confirmation. Type "y" or "confirm" to proceed, "n" to abort.', 'text-amber-400/70');
+      return;
+    }
+
     if (base === 'netrn') {
       const sub = parts[1];
       if (!sub) {
         pushOut('Netrunner OS v2.1.0 — Project Netrunner CLI', 'text-amber-300/80');
         pushOut('', '');
-        pushOut(
-          'I really want to go to the moon. — Lucy Kushinada',
-          'text-amber-300/60 italic'
-        );
+        pushOut('I really want to go to the moon. — Lucy Kushinada', 'text-amber-300/60 italic');
         pushOut(
           'Lucyna "Lucy" Kushinada is a netrunner from Night City, deuteragonist of',
           'text-red-300/60'
@@ -185,7 +261,7 @@ export function ConsoleLayout({
           'text-red-300/60'
         );
         pushOut(
-          'joined Maine\'s crew of edgerunners. David Martinez — the protagonist — fell for',
+          "joined Maine's crew of edgerunners. David Martinez — the protagonist — fell for",
           'text-red-300/60'
         );
         pushOut(
@@ -216,12 +292,12 @@ export function ConsoleLayout({
       if (sub === 'github') {
         pushOut('Opening Project Netrunner repository...', 'text-amber-400/70');
         if (typeof window !== 'undefined') {
-          window.open('https://github.com/bhuvan-gs/project-netrunner', '_blank');
+          window.open('https://github.com/BhuvanGS/project-netrunner', '_blank');
         }
         return;
       }
       if (sub === 'master') {
-        pushOut('bhuvan-gs', 'text-amber-300/80');
+        pushOut('BhuvanGS', 'text-amber-300/80');
         pushOut('Lead architect. Netrunner. Night City resident.', 'text-red-300/60');
         return;
       }
@@ -235,8 +311,19 @@ export function ConsoleLayout({
         setTimeout(() => handleAnalyze(url), 0);
         return;
       }
+      if (sub === 'jackin') {
+        pushOut('Initiating neural link handshake...', 'text-amber-400/70');
+        onJackIn();
+        return;
+      }
+      if (sub === 'help') {
+        pushOut('Netrunner OS v2.1.0 — Project Netrunner CLI', 'text-amber-300/80');
+        pushOut('', '');
+        helpLines().forEach((l) => setHistory((h) => [...h, l]));
+        return;
+      }
       pushOut(`[ERROR] Unknown command: netrn ${sub}`, 'text-rose-400');
-      pushOut("Type 'netrn' for available commands.", 'text-slate-500');
+      pushOut("Type 'netrn help' for available commands.", 'text-slate-500');
       return;
     }
 
@@ -286,64 +373,121 @@ export function ConsoleLayout({
         </div>
 
         {/* terminal body */}
-        <div
-          ref={termRef}
-          className='flex flex-1 flex-col gap-1 overflow-y-auto p-6 text-red-300/80'
-        >
-          {/* command history */}
-          {history.map((entry, i) =>
-            entry.type === 'in' ? (
-              <div key={i} className='flex items-center gap-2'>
-                <span className='text-amber-400/80'>netrunner</span>
-                <span className='text-slate-600'>@</span>
-                <span className='text-red-400/60'>console</span>
-                <span className='text-slate-600'>:</span>
-                <span className='text-red-400/40'>~</span>
-                <span className='text-slate-600'>$</span>
-                <span className='ml-1 text-red-100'>{entry.text}</span>
-              </div>
-            ) : (
-              <div key={i} className={`whitespace-pre-wrap text-xs ${entry.color || 'text-red-200/70'}`}>
-                {entry.text}
-              </div>
-            )
-          )}
-
-          {/* loading indicator */}
-          {isLoading && (
-            <>
-              <div className='text-xs text-amber-400/70'>[WORK] Cloning repository... parsing file tree...</div>
-              <div className='mt-2 h-1 w-48 overflow-hidden rounded bg-red-900/30'>
-                <div className='h-full w-1/2 animate-pulse bg-red-500/50' />
-              </div>
-            </>
-          )}
-
-          {/* prompt */}
-          <form
-            className='flex items-center gap-2'
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleCommand(input);
-              setInput('');
-            }}
+        <div className='flex-1 p-4'>
+          <div
+            ref={termRef}
+            className='flex h-full flex-col gap-1 overflow-y-auto rounded border border-red-500/15 bg-[#020408]/80 p-5 text-red-300/80 shadow-[inset_0_0_40px_rgba(255,50,50,0.04)]'
           >
-            <span className='text-amber-400/80'>netrunner</span>
-            <span className='text-slate-600'>@</span>
-            <span className='text-red-400/60'>console</span>
-            <span className='text-slate-600'>:</span>
-            <span className='text-red-400/40'>~</span>
-            <span className='text-slate-600'>$</span>
-            <input
-              aria-label='Command input'
-              className='ml-1 flex-1 bg-transparent text-sm text-red-100 outline-none placeholder:text-red-900/50'
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type 'netrn' to begin"
-              disabled={isLoading}
-              autoFocus
-            />
-          </form>
+            {/* command history */}
+            {history.map((entry, i) =>
+              entry.type === 'in' ? (
+                <div key={i} className='flex items-center gap-2'>
+                  <span className='text-amber-400/80'>netrunner</span>
+                  <span className='text-slate-600'>@</span>
+                  <span className='text-red-400/60'>console</span>
+                  <span className='text-slate-600'>:</span>
+                  <span className='text-red-400/40'>~</span>
+                  <span className='text-slate-600'>$</span>
+                  <span className='ml-1 text-red-100'>{entry.text}</span>
+                </div>
+              ) : (
+                <div
+                  key={i}
+                  className={`whitespace-pre-wrap text-xs ${entry.color || 'text-red-200/70'}`}
+                >
+                  {entry.text}
+                </div>
+              )
+            )}
+
+            {/* loading indicator */}
+            {isLoading && (
+              <>
+                <div className='text-xs text-amber-400/70'>
+                  [WORK] Cloning repository... parsing file tree...
+                </div>
+                <div className='mt-2 h-1 w-48 overflow-hidden rounded bg-red-900/30'>
+                  <div className='h-full w-1/2 animate-pulse bg-red-500/50' />
+                </div>
+              </>
+            )}
+
+            {/* prompt */}
+            <form
+              className='flex items-center gap-2'
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCommand(input);
+                setInput('');
+                setCursorPos(0);
+              }}
+            >
+              <span className='text-amber-400/80'>netrunner</span>
+              <span className='text-slate-600'>@</span>
+              <span className='text-red-400/60'>console</span>
+              <span className='text-slate-600'>:</span>
+              <span className='text-red-400/40'>~</span>
+              <span className='text-slate-600'>$</span>
+              <div className='relative ml-1 flex-1'>
+                {/* Visible text + block cursor */}
+                <div className='pointer-events-none absolute inset-0 flex items-center whitespace-pre text-sm'>
+                  {!input ? (
+                    <>
+                      {!isLoading && (
+                        <span
+                          className='inline-block h-[1em] w-2 bg-red-400/80'
+                          style={{ animation: 'boot-cursor-blink 0.78s steps(1, end) infinite' }}
+                        />
+                      )}
+                      <span className='ml-1.5 text-red-900/50'>Type 'netrn' to begin</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className='text-red-100'>{input.slice(0, cursorPos)}</span>
+                      {!isLoading && (
+                        <span className='relative inline-block h-[1em] min-w-[1ch]'>
+                          {input[cursorPos] && (
+                            <span className='text-red-100 whitespace-pre'>{input[cursorPos]}</span>
+                          )}
+                          <span
+                            className='absolute inset-0 bg-red-400/80'
+                            style={{ animation: 'boot-cursor-blink 0.78s steps(1, end) infinite' }}
+                          />
+                        </span>
+                      )}
+                      <span className='text-red-100'>{input.slice(cursorPos + 1)}</span>
+                    </>
+                  )}
+                </div>
+                {/* Invisible input for focus & typing */}
+                <input
+                  ref={inputRef}
+                  aria-label='Command input'
+                  className='w-full bg-transparent text-sm text-transparent caret-transparent outline-none'
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    setCursorPos(e.target.selectionStart || 0);
+                  }}
+                  onSelect={(e) => {
+                    setCursorPos(e.currentTarget.selectionStart || 0);
+                  }}
+                  onKeyUp={() => {
+                    if (inputRef.current) {
+                      setCursorPos(inputRef.current.selectionStart || 0);
+                    }
+                  }}
+                  onClick={() => {
+                    if (inputRef.current) {
+                      setCursorPos(inputRef.current.selectionStart || 0);
+                    }
+                  }}
+                  disabled={isLoading}
+                  autoFocus
+                />
+              </div>
+            </form>
+          </div>
         </div>
 
         {/* scanline overlay */}
@@ -404,14 +548,39 @@ function helpLines(): { type: 'out'; text: string; color: string }[] {
     { type: 'out', text: '║         NETRN COMMAND REFERENCE          ║', color: 'text-red-500/30' },
     { type: 'out', text: '╚══════════════════════════════════════════╝', color: 'text-red-500/30' },
     { type: 'out', text: '', color: '' },
-    { type: 'out', text: '  netrn                 Show help + lore easter egg', color: 'text-red-200/70' },
+    { type: 'out', text: '  netrn                 Lore easter egg', color: 'text-red-200/70' },
     { type: 'out', text: '  netrn help            Show this reference', color: 'text-red-200/70' },
-    { type: 'out', text: '  netrn whoami          Display current user stats', color: 'text-red-200/70' },
-    { type: 'out', text: '  netrn github          Open Project Netrunner repo', color: 'text-red-200/70' },
-    { type: 'out', text: '  netrn master          Show master architect', color: 'text-red-200/70' },
-    { type: 'out', text: '  netrn analyze <url>   Analyze a GitHub repository', color: 'text-red-200/70' },
-    { type: 'out', text: '  jackin                Enter cyberspace', color: 'text-red-200/70' },
+    {
+      type: 'out',
+      text: '  netrn whoami          Display current user stats',
+      color: 'text-red-200/70',
+    },
+    {
+      type: 'out',
+      text: '  netrn github          Open Project Netrunner repo',
+      color: 'text-red-200/70',
+    },
+    {
+      type: 'out',
+      text: '  netrn master          Show master architect',
+      color: 'text-red-200/70',
+    },
+    {
+      type: 'out',
+      text: '  netrn analyze <url>   Analyze a GitHub repository',
+      color: 'text-red-200/70',
+    },
+    { type: 'out', text: '  netrn jackin          Enter cyberspace', color: 'text-red-200/70' },
+    {
+      type: 'out',
+      text: '  jackin                Enter cyberspace (shortcut)',
+      color: 'text-red-200/70',
+    },
     { type: 'out', text: '  clear                 Clear terminal', color: 'text-red-200/70' },
-    { type: 'out', text: '  <github-url>          Direct analyze shortcut', color: 'text-red-200/70' },
+    {
+      type: 'out',
+      text: '  <github-url>          Direct analyze shortcut',
+      color: 'text-red-200/70',
+    },
   ];
 }

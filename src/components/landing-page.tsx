@@ -302,8 +302,10 @@ export function LandingPage() {
               href='/generate'
               className='relative inline-flex h-14 min-w-[200px] items-center justify-center overflow-hidden rounded-2xl border border-amber-500/40 px-5 text-sm font-semibold text-amber-100 transition duration-200 hover:border-amber-300/70 focus:outline-none focus:ring-2 focus:ring-amber-300/50'
               style={{
-                background: 'linear-gradient(135deg, rgba(255, 160, 40, 0.18), rgba(255, 100, 20, 0.08))',
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px rgba(255, 140, 30, 0.14)',
+                background:
+                  'linear-gradient(135deg, rgba(255, 160, 40, 0.18), rgba(255, 100, 20, 0.08))',
+                boxShadow:
+                  'inset 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px rgba(255, 140, 30, 0.14)',
               }}
             >
               Access Cyber Console
@@ -554,14 +556,17 @@ export function LandingPage() {
               Enter the Grid
             </h2>
             <p className='mx-auto mb-8 max-w-md text-sm leading-relaxed text-slate-400'>
-              Your architecture is waiting. Jack in and see your codebase as it was meant to be seen — a living, breathing system.
+              Your architecture is waiting. Jack in and see your codebase as it was meant to be seen
+              — a living, breathing system.
             </p>
             <Link
               href='/generate'
               className='relative inline-flex h-14 min-w-[220px] items-center justify-center overflow-hidden rounded-2xl border border-amber-500/40 px-6 text-sm font-semibold text-amber-100 transition duration-200 hover:border-amber-300/70 focus:outline-none focus:ring-2 focus:ring-amber-300/50'
               style={{
-                background: 'linear-gradient(135deg, rgba(255, 160, 40, 0.18), rgba(255, 100, 20, 0.08))',
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px rgba(255, 140, 30, 0.14)',
+                background:
+                  'linear-gradient(135deg, rgba(255, 160, 40, 0.18), rgba(255, 100, 20, 0.08))',
+                boxShadow:
+                  'inset 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px rgba(255, 140, 30, 0.14)',
               }}
             >
               Access Cyber Console
@@ -569,7 +574,7 @@ export function LandingPage() {
 
             {/* tech badges */}
             <div className='mt-8 flex flex-wrap items-center justify-center gap-2'>
-              {['React', 'Next.js', 'Express', 'NestJS', 'Monorepos'].map(t => (
+              {['React', 'Next.js', 'Express', 'NestJS', 'Monorepos'].map((t) => (
                 <span
                   key={t}
                   className='inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400'

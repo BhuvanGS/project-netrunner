@@ -15,6 +15,7 @@ export function NetrunnerConsole() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [icePending, setIcePending] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'console' | 'boot' | 'cyberspace'>('console');
   const [emergePhase, setEmergePhase] = useState(0);
   const [bootFading, setBootFading] = useState(false);
@@ -92,9 +93,10 @@ export function NetrunnerConsole() {
     };
   }, []);
 
-  async function handleAnalyze(url?: string) {
+  async function handleAnalyze(url?: string, force = false) {
     setIsLoading(true);
     setError(null);
+    setIcePending(null);
     const targetUrl = url || repoUrl;
 
     try {
@@ -103,12 +105,18 @@ export function NetrunnerConsole() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ repoUrl: targetUrl }),
+        body: JSON.stringify({ repoUrl: targetUrl, force }),
       });
 
-      const data = (await response.json()) as ArchitectureGraph | { error: string };
+      const data = (await response.json()) as
+        | ArchitectureGraph
+        | { error: string; isPrivate?: boolean };
 
       if (!response.ok || 'error' in data) {
+        if ('isPrivate' in data && data.isPrivate) {
+          setIcePending(targetUrl);
+          return;
+        }
         throw new Error('error' in data ? data.error : 'Failed to analyze repository.');
       }
 
@@ -121,6 +129,16 @@ export function NetrunnerConsole() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function confirmIce() {
+    if (!icePending) return;
+    setIcePending(null);
+    handleAnalyze(icePending, true);
+  }
+
+  function cancelIce() {
+    setIcePending(null);
   }
 
   const isConsole = viewMode === 'console';
@@ -138,21 +156,27 @@ export function NetrunnerConsole() {
           graph={graph}
           handleAnalyze={handleAnalyze}
           onJackIn={() => setShowWarning(true)}
+          icePending={icePending}
+          onConfirmIce={confirmIce}
+          onCancelIce={cancelIce}
         />
       )}
 
       {isBoot && <CyberBootSequence fading={bootFading} glitch={glitchPhase} />}
 
       {(viewMode === 'boot' || viewMode === 'cyberspace') && (
-        <CityScene
-          key={`cyberspace-run-${cyberspaceRunId}`}
-          graph={graph}
-          selectedNode={selectedNode}
-          onSelectNode={setSelectedNode}
-          emergePhase={emergePhase}
-          isFullScreen
-          onBlackwallDeath={handleBlackwallDeath}
-        />
+        <>
+          <CityScene
+            key={`cyberspace-run-${cyberspaceRunId}`}
+            graph={graph}
+            selectedNode={selectedNode}
+            onSelectNode={setSelectedNode}
+            emergePhase={emergePhase}
+            isFullScreen
+            onBlackwallDeath={handleBlackwallDeath}
+          />
+          <InspectionPanel node={selectedNode} />
+        </>
       )}
 
       {showWarning && (
@@ -160,10 +184,10 @@ export function NetrunnerConsole() {
           <div className='warning-panel'>
             <h2 className='warning-title'>NEURAL LINK WARNING</h2>
             <p className='warning-body'>
-              Cyberspace infiltration protocols activated. High-frequency datastreams,
-              rapid chromatic inversion, and stroboscopic blackwall fragments will
-              flood the neural interface. These visual assaults may trigger optical
-              seizures in individuals with photosensitive epilepsy.
+              Cyberspace infiltration protocols activated. High-frequency datastreams, rapid
+              chromatic inversion, and stroboscopic blackwall fragments will flood the neural
+              interface. These visual assaults may trigger optical seizures in individuals with
+              photosensitive epilepsy.
             </p>
             <p className='warning-body mt-2'>
               If your cortex is compromised, abort now. Otherwise — jack in at your own risk.
@@ -431,7 +455,9 @@ function CyberBootSequence({ fading, glitch }: { fading?: boolean; glitch?: bool
   }, []);
 
   return (
-    <div className={`cyber-boot-overlay ${fading ? 'boot-fading' : ''} ${glitch ? 'boot-glitch' : ''}`}>
+    <div
+      className={`cyber-boot-overlay ${fading ? 'boot-fading' : ''} ${glitch ? 'boot-glitch' : ''}`}
+    >
       {showBanner && (
         <div className='boot-banner'>
           <span className='boot-banner-text'>{BANNER}</span>

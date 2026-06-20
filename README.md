@@ -2,7 +2,7 @@
 
 > Clone. Analyze. Jack In.
 
-A Next.js application that clones GitHub repositories, analyzes their TypeScript architecture, and renders the codebase as an immersive 3D cyberpunk cityscape. Built for developers who want to *see* their architecture.
+A Next.js application that clones GitHub repositories, analyzes their TypeScript architecture, and renders the codebase as an immersive 3D cyberpunk cityscape. Built for developers who want to _see_ their architecture.
 
 ---
 
@@ -17,15 +17,15 @@ A Next.js application that clones GitHub repositories, analyzes their TypeScript
 
 ## Tech Stack
 
-| Layer | Tech |
-|-------|------|
-| Framework | Next.js 14 (App Router) + TypeScript |
-| Styling | Tailwind CSS + shadcn/ui |
-| 3D Engine | React Three Fiber + Three.js + Drei + Post-Processing |
-| Animation | GSAP |
-| Analysis | Babel parser + `ts-morph` + `dependency-cruiser` |
-| Git | `simple-git` |
-| Validation | Zod |
+| Layer      | Tech                                                  |
+| ---------- | ----------------------------------------------------- |
+| Framework  | Next.js 14 (App Router) + TypeScript                  |
+| Styling    | Tailwind CSS + shadcn/ui                              |
+| 3D Engine  | React Three Fiber + Three.js + Drei + Post-Processing |
+| Animation  | GSAP                                                  |
+| Analysis   | Babel parser + `ts-morph` + `dependency-cruiser`      |
+| Git        | `simple-git`                                          |
+| Validation | Zod                                                   |
 
 ---
 
@@ -48,6 +48,7 @@ Open `http://localhost:3000`.
 ### `/` — Landing Page
 
 A cyberpunk-themed landing page featuring:
+
 - Glitch-effect animated logo
 - Typewriter-style hero text
 - Feature cards explaining the "Neural Link" workflow
@@ -59,18 +60,19 @@ A full-screen terminal interface (80/20 split with a live system-stats sidebar).
 
 **CLI Commands:**
 
-| Command | Action |
-|---------|--------|
-| `netrn` | Display the Edgerunners lore easter egg |
-| `netrn whoami` | Show current system & user stats |
-| `netrn github` | Open the Project Netrunner GitHub repo |
-| `netrn master` | Display the lead architect |
-| `netrn analyze <url>` | Clone and analyze a GitHub repository |
-| `<github-url>` | Direct analyze shortcut |
-| `jackin` | Enter cyberspace (triggers the boot sequence) |
-| `clear` | Clear terminal history |
+| Command               | Action                                        |
+| --------------------- | --------------------------------------------- |
+| `netrn`               | Display the Edgerunners lore easter egg       |
+| `netrn whoami`        | Show current system & user stats              |
+| `netrn github`        | Open the Project Netrunner GitHub repo        |
+| `netrn master`        | Display the lead architect                    |
+| `netrn analyze <url>` | Clone and analyze a GitHub repository         |
+| `<github-url>`        | Direct analyze shortcut                       |
+| `jackin`              | Enter cyberspace (triggers the boot sequence) |
+| `clear`               | Clear terminal history                        |
 
 **Sidebar:**
+
 - Live IP address detection
 - Platform / browser / resolution detection
 - Simulated CPU temperature & uptime counter
@@ -79,6 +81,7 @@ A full-screen terminal interface (80/20 split with a live system-stats sidebar).
 ### Cyberspace — Boot Sequence → 3D City
 
 After typing `jackin` and accepting the neural-link warning, a dense red-themed terminal boot sequence plays across five columns of streaming data. Then the camera drops into a fully navigable 3D cyberpunk city where:
+
 - **Towers** = API routes & services
 - **Vaults** = Databases
 - **Gates** = Authentication layers
@@ -108,6 +111,7 @@ The analyzer (`src/lib/analyzer/index.ts`) does the following for every cloned r
 ## Visual Design
 
 The UI follows a **Blackwall / Cyberpunk** aesthetic:
+
 - **Primary accent:** Red (`#ff4444`) — replacing the original cyan for a harsher, more aggressive look
 - **Terminal:** Red-amber monochrome with scanline overlay
 - **Boot sequence:** Dense red text streams across five terminal columns
@@ -151,4 +155,4 @@ MIT
 
 ---
 
-*Built by bhuvan-gs in Night City.*
+_Built by bhuvan-gs in Night City._

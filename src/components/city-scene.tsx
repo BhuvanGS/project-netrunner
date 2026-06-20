@@ -192,7 +192,11 @@ export function CityScene({
         <DependencyGalaxy graph={graph} />
         <ExternalSatellites graph={graph} />
         <CyberspaceField graph={graph} cityRadius={cityRadius} />
-        <Blackwall cityRadius={cityRadius} wallRadius={blackwallRadius} proximity={blackwallProximity} />
+        <Blackwall
+          cityRadius={cityRadius}
+          wallRadius={blackwallRadius}
+          proximity={blackwallProximity}
+        />
         <RoadNetwork graph={graph} />
         <EdgeStreams graph={graph} />
         <NavigationController
@@ -218,10 +222,19 @@ export function CityScene({
       <div className='cyberspace-noise' aria-hidden='true' />
       <div
         className={`blackwall-glitch-overlay ${blackwallProximity > 0.62 ? 'blackwall-glitch-active' : ''} ${blackwallPulse ? 'blackwall-glitch-hit' : ''} ${blackwallBreachGlitch ? 'blackwall-breach-hit' : ''} ${blackwallCriticalGlitch ? 'blackwall-critical-hit' : ''} ${blackwallDeathFade ? 'blackwall-final-meltdown' : ''}`}
-        style={{ opacity: blackwallDeathFade ? 1 : blackwallProximity > 0.62 ? Math.min(1, (blackwallProximity - 0.62) * 2.2) : 0 }}
+        style={{
+          opacity: blackwallDeathFade
+            ? 1
+            : blackwallProximity > 0.62
+              ? Math.min(1, (blackwallProximity - 0.62) * 2.2)
+              : 0,
+        }}
         aria-hidden='true'
       />
-      <div className={`blackwall-death-overlay ${blackwallDeathFade ? 'blackwall-death-active' : ''}`} aria-hidden='true' />
+      <div
+        className={`blackwall-death-overlay ${blackwallDeathFade ? 'blackwall-death-active' : ''}`}
+        aria-hidden='true'
+      />
     </div>
   );
 }
@@ -683,7 +696,11 @@ function Blackwall({
   // ── Strand material ────────────────────────────────────────────────────────
   const strandMat = useMemo(() => {
     const m = new THREE_ShaderMaterial({
-      uniforms: { time: { value: 0 }, reveal: { value: 0 }, hotspotDir: { value: new Vector2(1, 0) } },
+      uniforms: {
+        time: { value: 0 },
+        reveal: { value: 0 },
+        hotspotDir: { value: new Vector2(1, 0) },
+      },
       vertexShader: `
         uniform float time;
         uniform vec2 hotspotDir;
@@ -738,7 +755,11 @@ function Blackwall({
   // ── Lightning material ─────────────────────────────────────────────────────
   const lightningMat = useMemo(() => {
     const m = new THREE_ShaderMaterial({
-      uniforms: { time: { value: 0 }, reveal: { value: 0 }, hotspotDir: { value: new Vector2(1, 0) } },
+      uniforms: {
+        time: { value: 0 },
+        reveal: { value: 0 },
+        hotspotDir: { value: new Vector2(1, 0) },
+      },
       vertexShader: `
         uniform float time;
         uniform vec2 hotspotDir;
@@ -781,7 +802,11 @@ function Blackwall({
   // ── Horizon glow material ──────────────────────────────────────────────────
   const horizonMat = useMemo(() => {
     const m = new THREE_ShaderMaterial({
-      uniforms: { time: { value: 0 }, reveal: { value: 0 }, hotspotDir: { value: new Vector2(1, 0) } },
+      uniforms: {
+        time: { value: 0 },
+        reveal: { value: 0 },
+        hotspotDir: { value: new Vector2(1, 0) },
+      },
       vertexShader: `
         uniform float time;
         uniform vec2 hotspotDir;
@@ -824,7 +849,11 @@ function Blackwall({
   // ── Ground bleed material ──────────────────────────────────────────────────
   const bleedMat = useMemo(() => {
     const m = new THREE_ShaderMaterial({
-      uniforms: { time: { value: 0 }, reveal: { value: 0 }, hotspotDir: { value: new Vector2(1, 0) } },
+      uniforms: {
+        time: { value: 0 },
+        reveal: { value: 0 },
+        hotspotDir: { value: new Vector2(1, 0) },
+      },
       vertexShader: `
         uniform vec2 hotspotDir;
         varying float vHot;

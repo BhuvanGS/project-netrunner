@@ -6,6 +6,7 @@ import { parse } from '@babel/parser';
 import traverse from '@babel/traverse';
 import simpleGit from 'simple-git';
 import { layoutArchitectureNodes } from '@/lib/city-layout';
+import { mockArchitectureGraph } from '@/lib/mock-graph';
 import type {
   AnalysisFile,
   ArchitectureGraph,
@@ -54,8 +55,13 @@ const BUILDING_KIND_MAP: Record<ArchitectureType, BuildingKind> = {
   service: 'tower',
 };
 
-export async function analyzeRepository(repoUrl: string): Promise<ArchitectureGraph> {
+export async function analyzeRepository(repoUrl: string, force = false): Promise<ArchitectureGraph> {
   const repoName = extractRepoName(repoUrl);
+
+  if (!force) {
+    await assertRepoAccessible(repoUrl);
+  }
+
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'project-netrunner-'));
   const repoPath = path.join(workspace, repoName);
 
@@ -67,8 +73,38 @@ export async function analyzeRepository(repoUrl: string): Promise<ArchitectureGr
     const internalFiles = await analyzeFiles(repoPath, sourcePaths);
 
     return buildArchitectureGraph(repoUrl, repoName, internalFiles);
+  } catch (err) {
+    if (force && err instanceof Error && /auth|credentials|permission/i.test(err.message)) {
+      // ICE bypass failed — return simulated data for the private repo
+      return {
+        ...mockArchitectureGraph,
+        repoUrl,
+        repoName,
+        generatedAt: new Date().toISOString(),
+      };
+    }
+    throw err;
   } finally {
     await rm(workspace, { recursive: true, force: true });
+  }
+}
+
+async function assertRepoAccessible(repoUrl: string) {
+  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) return;
+
+  const [, owner, repo] = match;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+    if (res.status === 404) {
+      throw new Error('ICE: Repository is private or requires authentication.');
+    }
+    if (!res.ok) {
+      throw new Error(`ICE: GitHub API returned ${res.status}. Repository may be private or unavailable.`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('ICE:')) throw err;
+    // Network errors: still try cloning, let git handle it
   }
 }
 

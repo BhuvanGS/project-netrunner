@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Orbitron } from 'next/font/google';
 import type { ReactNode } from 'react';
 import './globals.css';
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang='en' className={cn("font-sans", inter.variable)}>
+    <html lang='en' className={cn('font-sans', inter.variable)}>
       <body
         className={`${inter.variable} ${orbitron.variable} bg-abyss text-slate-100 antialiased`}
       >

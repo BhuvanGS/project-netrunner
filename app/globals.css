@@ -1,5 +1,5 @@
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -919,11 +919,26 @@ body {
 }
 
 @keyframes glitch-slice {
-  0% { clip-path: inset(0 0 85% 0); transform: translateX(-4px); }
-  25% { clip-path: inset(15% 0 60% 0); transform: translateX(6px); }
-  50% { clip-path: inset(40% 0 35% 0); transform: translateX(-3px); }
-  75% { clip-path: inset(65% 0 10% 0); transform: translateX(5px); }
-  100% { clip-path: inset(90% 0 0 0); transform: translateX(-2px); }
+  0% {
+    clip-path: inset(0 0 85% 0);
+    transform: translateX(-4px);
+  }
+  25% {
+    clip-path: inset(15% 0 60% 0);
+    transform: translateX(6px);
+  }
+  50% {
+    clip-path: inset(40% 0 35% 0);
+    transform: translateX(-3px);
+  }
+  75% {
+    clip-path: inset(65% 0 10% 0);
+    transform: translateX(5px);
+  }
+  100% {
+    clip-path: inset(90% 0 0 0);
+    transform: translateX(-2px);
+  }
 }
 
 /* CRT scanline overlay */
