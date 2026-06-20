@@ -161,7 +161,10 @@ export function ConsoleLayout({
       pushOut(`Target: ${shortUrl}`, 'text-red-300/70');
       pushOut('Status: PRIVATE — Authentication barrier detected', 'text-red-300/70');
       pushOut('', '');
-      pushOut('[WARN] Jacking private repository. Unauthorized access carries risk.', 'text-amber-400/70');
+      pushOut(
+        '[WARN] Jacking private repository. Unauthorized access carries risk.',
+        'text-amber-400/70'
+      );
       pushOut('[PROMPT] Confirm breach? Type "y" or "confirm" to proceed.', 'text-amber-400/70');
       prevIceRef.current = icePending;
     }
@@ -242,7 +245,10 @@ export function ConsoleLayout({
         onCancelIce();
         return;
       }
-      pushOut('[ICE] Awaiting confirmation. Type "y" or "confirm" to proceed, "n" to abort.', 'text-amber-400/70');
+      pushOut(
+        '[ICE] Awaiting confirmation. Type "y" or "confirm" to proceed, "n" to abort.',
+        'text-amber-400/70'
+      );
       return;
     }
 

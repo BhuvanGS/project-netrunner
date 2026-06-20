@@ -232,8 +232,16 @@ const OUTRO_LINES = [
   { text: '[WARN] Signal degradation detected — 78%', delay: 180, style: '' },
   { text: '[WARN] Signal degradation detected — 45%', delay: 360, style: '' },
   { text: '[WARN] Signal degradation detected — 12%', delay: 520, style: '' },
-  { text: '[ERROR] Stream integrity failure — sector 0x7F3A', delay: 700, style: 'outro-line-fail' },
-  { text: '[FAIL] Blackwall fragment collision — evasive abort', delay: 880, style: 'outro-line-glitch' },
+  {
+    text: '[ERROR] Stream integrity failure — sector 0x7F3A',
+    delay: 700,
+    style: 'outro-line-fail',
+  },
+  {
+    text: '[FAIL] Blackwall fragment collision — evasive abort',
+    delay: 880,
+    style: 'outro-line-glitch',
+  },
   { text: '', delay: 1000, style: '' },
   { text: '[SYS] Flushing neural buffers...', delay: 1150, style: 'outro-line-dim' },
   { text: '[SYS] Purging session cache...', delay: 1300, style: 'outro-line-dim' },
@@ -266,7 +274,9 @@ function CyberOutroSequence({ onComplete }: { onComplete: () => void }) {
           <span className='outro-terminal-dot outro-terminal-dot-red' />
           <span className='outro-terminal-dot outro-terminal-dot-amber' />
           <span className='outro-terminal-dot outro-terminal-dot-cyan' />
-          <span className='outro-terminal-title'>[KERNEL::OUTRO] /dev/neural-link :: SESSION_TEARDOWN</span>
+          <span className='outro-terminal-title'>
+            [KERNEL::OUTRO] /dev/neural-link :: SESSION_TEARDOWN
+          </span>
         </div>
         <div className='outro-terminal-body'>
           {OUTRO_LINES.slice(0, visibleCount).map((line, i) => (

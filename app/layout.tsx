@@ -3,6 +3,7 @@ import { Inter, Orbitron } from 'next/font/google';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { cn } from '@/lib/utils';
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -32,6 +33,7 @@ export default function RootLayout({
         className={`${inter.variable} ${orbitron.variable} bg-abyss text-slate-100 antialiased`}
       >
         {children}
+        <Analytics />
       </body>
     </html>
   );

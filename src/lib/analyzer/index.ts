@@ -57,7 +57,10 @@ const BUILDING_KIND_MAP: Record<ArchitectureType, BuildingKind> = {
   service: 'tower',
 };
 
-export async function analyzeRepository(repoUrl: string, force = false): Promise<ArchitectureGraph> {
+export async function analyzeRepository(
+  repoUrl: string,
+  force = false
+): Promise<ArchitectureGraph> {
   const repoName = extractRepoName(repoUrl);
 
   if (!force) {
@@ -112,7 +115,9 @@ async function assertRepoAccessible(repoUrl: string) {
       throw new Error('ICE: Repository is private or requires authentication.');
     }
     if (!res.ok) {
-      throw new Error(`ICE: GitHub API returned ${res.status}. Repository may be private or unavailable.`);
+      throw new Error(
+        `ICE: GitHub API returned ${res.status}. Repository may be private or unavailable.`
+      );
     }
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('ICE:')) throw err;
