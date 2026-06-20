@@ -1,0 +1,235 @@
+import { seededRandom } from './cyberspace-structures';
+
+export interface StrandBundle {
+  positions: Float32Array;
+  strandIds: Float32Array;
+  heightNorms: Float32Array;
+  phaseOffsets: Float32Array;
+  borderWeights: Float32Array;
+  colors: Float32Array;
+  count: number;
+  strandCount: number;
+  primaryColor: [number, number, number];
+  bounds: { width: number; height: number; depth: number };
+}
+
+function pickColor(rng: () => number, primary: readonly [number, number, number]): [number, number, number] {
+  const roll = rng();
+  if (roll < 0.04) return [0.95, 0.99, 1.0]; // white spark
+  if (roll < 0.07) return [1.0, 0.176, 0.333]; // crimson spark
+  if (roll < 0.10) return [1.0, 0.843, 0.0]; // gold spark
+  if (roll < 0.13) return [0.0, 0.961, 1.0]; // cyan spark
+  return [primary[0], primary[1], primary[2]];
+}
+
+function makeBundle(
+  rng: () => number,
+  strandDefs: { x: number; z: number; r: number }[],
+  h: number,
+  count: number,
+  primary: readonly [number, number, number],
+  bounds: { width: number; height: number; depth: number }
+): StrandBundle {
+  const positions = new Float32Array(count * 3);
+  const strandIds = new Float32Array(count);
+  const heightNorms = new Float32Array(count);
+  const phaseOffsets = new Float32Array(count);
+  const borderWeights = new Float32Array(count);
+  const colors = new Float32Array(count * 3);
+  const hh = h / 2;
+  const pointsPerStrand = Math.floor(count / strandDefs.length);
+
+  let idx = 0;
+  for (let s = 0; s < strandDefs.length && idx < count; s++) {
+    const def = strandDefs[s];
+    const phase = rng() * Math.PI * 2;
+    for (let p = 0; p < pointsPerStrand && idx < count; p++) {
+      const yNorm = p / (pointsPerStrand - 1 || 1);
+      const y = -hh + yNorm * h;
+      positions[idx * 3]     = def.x;
+      positions[idx * 3 + 1] = y;
+      positions[idx * 3 + 2] = def.z;
+      strandIds[idx]         = s;
+      heightNorms[idx]       = yNorm;
+      phaseOffsets[idx]      = phase;
+      borderWeights[idx]     = def.r > 0.7 ? 1.0 : def.r > 0.3 ? 0.3 : 0.0;
+      const [r, g, b] = pickColor(rng, primary);
+      colors[idx * 3] = r; colors[idx * 3 + 1] = g; colors[idx * 3 + 2] = b;
+      idx++;
+    }
+  }
+
+  return {
+    positions: positions.subarray(0, idx * 3),
+    strandIds: strandIds.subarray(0, idx),
+    heightNorms: heightNorms.subarray(0, idx),
+    phaseOffsets: phaseOffsets.subarray(0, idx),
+    borderWeights: borderWeights.subarray(0, idx),
+    colors: colors.subarray(0, idx * 3),
+    count: idx,
+    strandCount: strandDefs.length,
+    primaryColor: [primary[0], primary[1], primary[2]],
+    bounds,
+  };
+}
+
+// ── Monolith: tapering cylinder ─────────────────────────────────────────────
+export function generateMonolithStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const hw = Math.max(w, d) / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const n = Math.max(20, Math.floor(count / 32));
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = Math.sqrt(rng());
+    strands.push({ x: Math.cos(a) * r * hw, z: Math.sin(a) * r * hw, r });
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── HexSpire: hexagonal prism, straight ────────────────────────────────────
+export function generateHexSpiresStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const hw = Math.max(w, d) / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const n = Math.max(24, Math.floor(count / 28));
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = Math.sqrt(rng());
+    strands.push({ x: Math.cos(a) * r * hw, z: Math.sin(a) * r * hw, r });
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── ForceField: sphere-like longitude strands ───────────────────────────────
+export function generateForceFieldStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const R = Math.max(w, d) / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const n = Math.max(18, Math.floor(count / 22));
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = Math.sqrt(rng());
+    strands.push({ x: Math.cos(a) * r * R, z: Math.sin(a) * r * R, r });
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── Highway: flat rectangular slab grid ────────────────────────────────────
+export function generateHighwayStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const hw = w / 2, hd = d / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const nx = Math.max(3, Math.round(w / 3.5));
+  const nz = Math.max(3, Math.round(d / 3.5));
+  for (let ix = 0; ix < nx; ix++) {
+    for (let iz = 0; iz < nz; iz++) {
+      const x = -hw + (ix / (nx - 1 || 1)) * w;
+      const z = -hd + (iz / (nz - 1 || 1)) * d;
+      const r = Math.sqrt((x / (hw + 0.001)) ** 2 + (z / (hd + 0.001)) ** 2) / Math.sqrt(2);
+      strands.push({ x, z, r });
+    }
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── Strata: tree — trunk + radiating branch strands ──────────────────────────
+export function generateStrataStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const hw = w / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  // Central trunk
+  strands.push({ x: 0, z: 0, r: 0 });
+  // 5 main branches radiating
+  const branches = 5;
+  for (let b = 0; b < branches; b++) {
+    const a = (b / branches) * Math.PI * 2 + rng() * 0.2;
+    const len = hw * (0.4 + rng() * 0.3);
+    strands.push({ x: Math.cos(a) * len, z: Math.sin(a) * len, r: 1.0 });
+    // Sub-branches
+    for (let sb = 0; sb < 2; sb++) {
+      const sa = a + (sb === 0 ? -0.5 : 0.5) + rng() * 0.2;
+      const sl = len * (0.5 + rng() * 0.2);
+      strands.push({ x: Math.cos(sa) * sl, z: Math.sin(sa) * sl, r: 0.8 });
+    }
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── Polyhedron: icosahedron-like sphere ────────────────────────────────────
+export function generatePolyhedronStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const R = Math.max(w, d) / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const n = Math.max(20, Math.floor(count / 20));
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2;
+    const dist = Math.sqrt(rng());
+    strands.push({ x: Math.cos(a) * dist * R, z: Math.sin(a) * dist * R, r: dist });
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── Tessellation: hex dome ──────────────────────────────────────────────────
+export function generateTessellationStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const R = Math.max(w, d) / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const n = Math.max(20, Math.floor(count / 24));
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2;
+    const dist = Math.sqrt(rng());
+    strands.push({ x: Math.cos(a) * dist * R, z: Math.sin(a) * dist * R, r: dist });
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── DataTower: vertical columns grid ──────────────────────────────────────
+export function generateDataTowerStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const hw = w / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const n = Math.max(16, Math.floor(count / 24));
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = Math.sqrt(rng());
+    strands.push({ x: Math.cos(a) * r * hw, z: Math.sin(a) * r * hw, r });
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}
+
+// ── CrystalLattice: lattice intersections ───────────────────────────────────
+export function generateCrystalLatticeStrands(
+  rng: () => number, w: number, h: number, d: number, count: number,
+  primary: readonly [number, number, number]
+): StrandBundle {
+  const hw = w / 2, hd = d / 2;
+  const strands: { x: number; z: number; r: number }[] = [];
+  const nx = Math.max(3, Math.round(w / 4));
+  const nz = Math.max(3, Math.round(d / 4));
+  for (let ix = 0; ix < nx; ix++) {
+    for (let iz = 0; iz < nz; iz++) {
+      const x = -hw + (ix / (nx - 1 || 1)) * w;
+      const z = -hd + (iz / (nz - 1 || 1)) * d;
+      const r = Math.sqrt((x / (hw + 0.001)) ** 2 + (z / (hd + 0.001)) ** 2) / Math.sqrt(2);
+      strands.push({ x, z, r });
+    }
+  }
+  return makeBundle(rng, strands, h, count, primary, { width: w, height: h, depth: d });
+}

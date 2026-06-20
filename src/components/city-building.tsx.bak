@@ -1,0 +1,165 @@
+'use client';
+
+import { Html } from '@react-three/drei';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AdditiveBlending, BufferAttribute, BufferGeometry, Points, ShaderMaterial } from 'three';
+import { buildNodeStructure, getTypeColor } from '@/lib/cyberspace-structures';
+import type { StrandBundle } from '@/lib/strand-generators';
+import type { ArchitectureNode } from '@/types/architecture';
+
+interface CityBuildingProps {
+  node: ArchitectureNode;
+  isSelected: boolean;
+  onSelect: (node: ArchitectureNode) => void;
+}
+
+export function CityBuilding({ node, isSelected, onSelect }: CityBuildingProps) {
+  const [hovered, setHovered] = useState(false);
+  const structure = useMemo<StrandBundle>(() => buildNodeStructure(node), [node]);
+
+  const px = node.position[0];
+  const pz = node.position[2];
+
+  const geometry = useMemo(() => {
+    const geom = new BufferGeometry();
+    geom.setAttribute('position', new BufferAttribute(structure.positions, 3));
+    geom.setAttribute('color', new BufferAttribute(structure.colors, 3));
+    geom.setAttribute('strandId', new BufferAttribute(structure.strandIds, 1));
+    geom.setAttribute('heightNorm', new BufferAttribute(structure.heightNorms, 1));
+    geom.setAttribute('phaseOffset', new BufferAttribute(structure.phaseOffsets, 1));
+    geom.setAttribute('borderWeight', new BufferAttribute(structure.borderWeights, 1));
+    return geom;
+  }, [structure]);
+
+  const baseSize = 0.22;
+
+  const material = useMemo(() => {
+    const tint = getTypeColor(node.type, node.id);
+    const vert = `
+      uniform float time;
+      uniform float pointSize;
+      attribute float strandId;
+      attribute float heightNorm;
+      attribute float phaseOffset;
+      attribute float borderWeight;
+      varying float vAlpha;
+      varying float vBorder;
+
+      void main() {
+        vec3 pos = position;
+
+        // Standing wave: gentle side-to-side oscillation
+        // sin(heightNorm * PI) = 0 at bottom and top, max at middle
+        float envelope = sin(heightNorm * 3.14159265);
+        float waveX = sin(time * 0.4 + phaseOffset) * envelope;
+        float waveZ = cos(time * 0.35 + phaseOffset * 1.7) * envelope;
+
+        // Amplitude: outer strands move more, inner strands stay tighter
+        float amp = 0.12 * (0.4 + borderWeight * 0.6);
+        // Slight dampening at top so strands don't fly apart
+        amp *= (1.0 - heightNorm * 0.25);
+
+        pos.x += waveX * amp;
+        pos.z += waveZ * amp;
+
+        // Slow breathing scale on whole structure
+        float breathe = 1.0 + sin(time * 0.6 + phaseOffset * 0.3) * 0.03;
+        pos *= breathe;
+
+        vBorder = borderWeight;
+        // Brighter at middle of strand, dimmer at ends
+        vAlpha = 0.55 + borderWeight * 0.45 + envelope * 0.25;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_PointSize = max(0.8, pointSize * (1.0 + borderWeight * 0.6) * (300.0 / -mvPosition.z));
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+    const frag = `
+      uniform vec3 tintColor;
+      varying float vAlpha;
+      varying float vBorder;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float r = length(uv);
+        if (r > 0.5) discard;
+        float soft = 1.0 - smoothstep(0.0, 0.5, r);
+
+        // Core tint with border brightness boost
+        vec3 col = tintColor * (0.75 + vBorder * 0.35);
+        // Hot white centre on bright border particles
+        col += vec3(0.9, 0.97, 1.0) * soft * soft * vBorder * 0.4;
+
+        gl_FragColor = vec4(col, soft * vAlpha * 0.72);
+      }
+    `;
+    return new ShaderMaterial({
+      uniforms: { time: { value: 0 }, pointSize: { value: baseSize }, tintColor: { value: tint } },
+      vertexShader: vert,
+      fragmentShader: frag,
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+    });
+  }, [baseSize, node.type, node.id]);
+
+  const pointsRef = useRef<Points>(null);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  useFrame(({ clock }) => {
+    if (!pointsRef.current) return;
+    const time = clock.elapsedTime;
+    (material as ShaderMaterial).uniforms.time.value = time;
+    const pulse = (Math.sin(time * 0.8 + structure.bounds.height * 0.2) + 1) / 2;
+    const focusBoost = isSelected ? 0.5 : hovered ? 0.25 : 0;
+    (material as ShaderMaterial).uniforms.pointSize.value = baseSize + pulse * 0.03 + focusBoost * 0.05;
+  });
+
+  const handleSelect = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation();
+    onSelect(node);
+  };
+
+  const halfHeight = structure.bounds.height / 2;
+  const proxyRadius = Math.max(structure.bounds.width, structure.bounds.depth) * 0.6;
+  const proxyHeight = structure.bounds.height * 1.05;
+
+  return (
+    <group position={[px, halfHeight, pz]}>
+      <points ref={pointsRef} geometry={geometry} material={material} />
+
+      <mesh
+        onClick={handleSelect}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={() => {
+          setHovered(false);
+          document.body.style.cursor = 'auto';
+        }}
+        position={[0, 0, 0]}
+      >
+        <cylinderGeometry args={[proxyRadius, proxyRadius, proxyHeight, 12, 1, true]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {(isSelected || hovered) ? (
+        <Html position={[0, halfHeight + 1.6, 0]} center distanceFactor={20} zIndexRange={[100, 0]} occlude={false}>
+          <div className="rounded-2xl border border-cyan-300/30 bg-slate-950/85 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-100 shadow-[0_0_24px_rgba(0,231,255,0.32)] backdrop-blur-md">
+            <div>{node.label}</div>
+            <div className="mt-1 text-[9px] tracking-[0.28em] text-slate-400">{node.type}</div>
+          </div>
+        </Html>
+      ) : null}
+    </group>
+  );
+}

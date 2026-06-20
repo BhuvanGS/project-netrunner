@@ -1,0 +1,915 @@
+import type { ArchitectureNode, ArchitectureType } from '@/types/architecture';
+import type { StrandBundle } from './strand-generators';
+import {
+  generateMonolithStrands,
+  generateHexSpiresStrands,
+  generateDataTowerStrands,
+  generateForceFieldStrands,
+  generateHighwayStrands,
+  generateStrataStrands,
+  generatePolyhedronStrands,
+  generateTessellationStrands,
+  generateCrystalLatticeStrands,
+} from './strand-generators';
+
+// ── Palette ──────────────────────────────────────────────────────────────────
+// Infrastructure  #EAFBFF #D9E4F5
+// Communication   #FF4FD8 #FF77FF #00F5FF
+// Storage         #A8F7FF #00D4C6
+// Dependencies    #39FF14 #00FF7F #BFFF00
+// External        #FFB000 #FF7A00 #FFD700
+// Mystery         #4B2EFF #8A2BE2 #B57CFF #FF2D55
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Infrastructure
+const INFRA_LIGHT  = [0.918, 0.984, 1.0]   as const; // #EAFBFF
+const INFRA_COOL   = [0.851, 0.894, 0.961] as const; // #D9E4F5
+// Communication
+const COMM_PINK    = [1.0, 0.310, 0.847]   as const; // #FF4FD8
+const COMM_VIOLET  = [1.0, 0.467, 1.0]     as const; // #FF77FF
+const COMM_CYAN    = [0.0, 0.961, 1.0]     as const; // #00F5FF
+// Storage
+const STORE_ICE    = [0.659, 0.969, 1.0]   as const; // #A8F7FF
+const STORE_TEAL   = [0.0,   0.831, 0.776] as const; // #00D4C6
+// Dependencies
+const DEP_GREEN    = [0.224, 1.0,   0.078] as const; // #39FF14
+const DEP_MINT     = [0.0,   1.0,   0.498] as const; // #00FF7F
+const DEP_LIME     = [0.749, 1.0,   0.0]   as const; // #BFFF00
+// External
+const EXT_AMBER    = [1.0,   0.690, 0.0]   as const; // #FFB000
+const EXT_ORANGE   = [1.0,   0.478, 0.0]   as const; // #FF7A00
+const EXT_GOLD     = [1.0,   0.843, 0.0]   as const; // #FFD700
+// Mystery
+const MYS_INDIGO   = [0.294, 0.180, 1.0]   as const; // #4B2EFF
+const MYS_VIOLET   = [0.541, 0.169, 0.886] as const; // #8A2BE2
+const MYS_LAVENDER = [0.710, 0.486, 1.0]   as const; // #B57CFF
+const MYS_CRIMSON  = [1.0,   0.176, 0.333] as const; // #FF2D55
+// Neutral
+const WHITE        = [0.95, 0.99, 1.0]     as const;
+
+// Full palette pool — every node picks one via its seed
+const PALETTE_POOL = [
+  INFRA_LIGHT, INFRA_COOL,
+  COMM_PINK, COMM_VIOLET, COMM_CYAN,
+  STORE_ICE, STORE_TEAL,
+  DEP_GREEN, DEP_MINT, DEP_LIME,
+  EXT_AMBER, EXT_ORANGE, EXT_GOLD,
+  MYS_INDIGO, MYS_VIOLET, MYS_LAVENDER, MYS_CRIMSON,
+] as const;
+
+// Type acts as a soft bias — keeps some semantic meaning while
+// ensuring variety. Pool index is derived from node seed so it's
+// stable across renders.
+const TYPE_BIAS: Record<ArchitectureType, number> = {
+  database:       2,  // starts at Storage region
+  authentication: 0,  // starts at Infra
+  api:            2,  // starts at Comm
+  service:        4,  // starts at Comm cyan
+  middleware:     7,  // starts at Deps
+  logger:         9,  // starts at Deps
+  utility:        7,  // starts at Deps
+  agent:          10, // starts at External
+  component:      13, // starts at Mystery
+};
+
+function nodeColor(type: ArchitectureType, nodeSeed: number): readonly [number, number, number] {
+  // Use the node seed to pick an offset (0–6) from the type bias
+  const bias = TYPE_BIAS[type] ?? 0;
+  const spread = Math.floor((nodeSeed >>> 4) % 7);
+  const idx = (bias + spread) % PALETTE_POOL.length;
+  return PALETTE_POOL[idx];
+}
+
+export function seededRandom(seed: number) {
+  let state = (seed || 1) >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0xffffffff;
+  };
+}
+
+function hashSeed(value: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0);
+}
+
+function pickColor(rng: () => number, primary: readonly [number, number, number]): [number, number, number] {
+  const roll = rng();
+  // Sprinkle palette-wide accent sparks for visual texture
+  if (roll < 0.03) return [WHITE[0],         WHITE[1],         WHITE[2]];         // bright white spark
+  if (roll < 0.06) return [MYS_CRIMSON[0],   MYS_CRIMSON[1],   MYS_CRIMSON[2]];  // hot pink spark
+  if (roll < 0.09) return [EXT_GOLD[0],      EXT_GOLD[1],      EXT_GOLD[2]];     // gold spark
+  if (roll < 0.11) return [COMM_CYAN[0],     COMM_CYAN[1],     COMM_CYAN[2]];    // cyan spark
+  return [primary[0], primary[1], primary[2]];
+}
+
+function densityFor(node: ArchitectureNode) {
+  const base = 2000 + node.fileCount * 350 + node.dependencyCount * 180 + node.routeCount * 100;
+  const multiplier =
+    node.type === 'database' ? 1.6
+    : node.type === 'agent' ? 2.2
+    : node.type === 'middleware' ? 1.6
+    : node.type === 'utility' ? 0.55
+    : 1;
+  return Math.max(800, Math.min(16000, Math.floor(base * multiplier)));
+}
+
+function generateMonolith(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [], bw: number[] = [];
+  const hw = Math.max(w, d) / 2;
+  const hh = h / 2;
+  const tiers = 7;
+  const tierH = h / tiers;
+
+  function addPillar(px: number, pz: number, baseY: number, height: number, step: number, border: number) {
+    const steps = Math.max(4, Math.floor(height / step));
+    for (let s = 0; s < steps; s++) {
+      pts.push(px + (rng()-0.5)*0.06, baseY + s*step, pz + (rng()-0.5)*0.06);
+      bw.push(border);
+    }
+  }
+
+  for (let t = 0; t < tiers; t++) {
+    const baseY = -hh + t * tierH;
+    const shrink = 1 - (t / tiers) * 0.72;
+    const size = hw * shrink;
+    const pillarH = tierH + 0.3 + rng() * 1.5;
+    const edgePillars = Math.max(2, Math.floor(size * 0.8));
+    // Bright ledge edge — glowing tier outlines
+    for (let e = 0; e < edgePillars; e++) {
+      const u = e / (edgePillars - 1);
+      addPillar(-size + u*size*2, -size, baseY, pillarH, 0.35, 1.0);
+      addPillar(size, -size + u*size*2, baseY, pillarH, 0.35, 1.0);
+      addPillar(size - u*size*2, size, baseY, pillarH, 0.35, 1.0);
+      addPillar(-size, size - u*size*2, baseY, pillarH, 0.35, 1.0);
+    }
+    // Glowing horizontal tier ledge ring
+    const ledgePts = Math.max(8, Math.floor(size * 3));
+    for (let i = 0; i < ledgePts; i++) {
+      const u = i / ledgePts;
+      let px: number, pz: number;
+      if (u < 0.25)      { px = -size + u*4*size*2; pz = -size; }
+      else if (u < 0.5)  { px = size;               pz = -size + (u-0.25)*4*size*2; }
+      else if (u < 0.75) { px = size-(u-0.5)*4*size*2; pz = size; }
+      else               { px = -size;              pz = size-(u-0.75)*4*size*2; }
+      pts.push(px+(rng()-0.5)*0.05, baseY+(rng()-0.5)*0.08, pz+(rng()-0.5)*0.05);
+      bw.push(1.0);
+    }
+    // Dim interior fill
+    if (t < 4) {
+      const inner = size * 0.5;
+      const ip = Math.max(2, Math.floor(inner * 0.5));
+      for (let e = 0; e < ip; e++) {
+        const u = e / (ip-1);
+        addPillar(-inner+u*inner*2, -inner, baseY, pillarH*0.7, 0.4, 0.0);
+        addPillar(inner, -inner+u*inner*2, baseY, pillarH*0.7, 0.4, 0.0);
+        addPillar(inner-u*inner*2, inner, baseY, pillarH*0.7, 0.4, 0.0);
+        addPillar(-inner, inner-u*inner*2, baseY, pillarH*0.7, 0.4, 0.0);
+      }
+    }
+    if (t < 3) addPillar(0, 0, baseY, pillarH*1.2, 0.3, 0.3);
+  }
+  // Antenna spire at top
+  const spireH = hh * 0.6;
+  for (let s = 0; s < 80; s++) {
+    const t = s / 80;
+    pts.push((rng()-0.5)*0.15, hh + t*spireH, (rng()-0.5)*0.15);
+    bw.push(t);
+  }
+
+  const total = Math.floor(pts.length/3);
+  const positions = new Float32Array(count*3), borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src = (i%total)*3;
+    positions[i*3]=pts[src]; positions[i*3+1]=pts[src+1]; positions[i*3+2]=pts[src+2];
+    borderWeights[i]=bw[i%total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateHexSpires(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [], bw: number[] = [];
+  const hw = w / 2, hh = h / 2;
+
+  function addPillar(px: number, pz: number, baseY: number, height: number, step: number, border: number) {
+    const steps = Math.max(4, Math.floor(height / step));
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      pts.push(px+(rng()-0.5)*0.06, baseY+s*step, pz+(rng()-0.5)*0.06);
+      bw.push(t > 0.85 ? 1.0 : border); // tips always bright
+    }
+  }
+
+  // Wide base — outer ring bright border, inner ring dim
+  const baseRings = 2;
+  for (let r = 0; r < baseRings; r++) {
+    const ringRadius = hw * (0.75 + r * 0.50);
+    const ringPillars = Math.max(6, Math.floor(ringRadius * 1.9));
+    for (let p = 0; p < ringPillars; p++) {
+      const angle = (p / ringPillars) * Math.PI * 2;
+      addPillar(Math.cos(angle)*ringRadius, Math.sin(angle)*ringRadius, -hh, hh*1.3, 0.3, r === baseRings-1 ? 1.0 : 0.2);
+    }
+  }
+  // Bright base perimeter ring
+  const basePts = Math.max(40, Math.floor(hw * 8));
+  for (let i = 0; i < basePts; i++) {
+    const a = (i/basePts)*Math.PI*2;
+    pts.push(Math.cos(a)*hw*1.25+(rng()-0.5)*0.1, -hh+(rng()-0.5)*0.1, Math.sin(a)*hw*1.25+(rng()-0.5)*0.1);
+    bw.push(1.0);
+  }
+
+  // Tall central spire — inner rings dim, outer ring border bright
+  const pillarRings = 2;
+  for (let r = 0; r < pillarRings; r++) {
+    const ringRadius = hw * (0.14 + r * 0.1);
+    const ringPillars = Math.max(6, Math.floor(ringRadius * 1.8));
+    for (let p = 0; p < ringPillars; p++) {
+      const angle = (p / ringPillars) * Math.PI * 2;
+      addPillar(Math.cos(angle)*ringRadius, Math.sin(angle)*ringRadius, -hh*1.15, hh*2.4, 0.3, r === pillarRings-1 ? 0.8 : 0.0);
+    }
+  }
+
+  // Glowing halo ring at top
+  const haloRadius = hw * 1.3;
+  const haloY = hh;
+  const haloPts = Math.max(8, Math.floor(haloRadius * 8));
+  for (let i = 0; i < haloPts; i++) {
+    const a = (i/haloPts)*Math.PI*2;
+    pts.push(Math.cos(a)*haloRadius+(rng()-0.5)*0.08, haloY+(rng()-0.5)*0.12, Math.sin(a)*haloRadius+(rng()-0.5)*0.08);
+    bw.push(1.0);
+  }
+  // Halo vertical accent pillars
+  const haloPillars = Math.max(8, Math.floor(haloRadius * 2.4));
+  for (let p = 0; p < haloPillars; p++) {
+    const angle = (p / haloPillars) * Math.PI * 2;
+    addPillar(Math.cos(angle)*haloRadius, Math.sin(angle)*haloRadius, haloY, hh*0.22, 0.3, 0.6);
+  }
+
+  // Top crown — bright apex
+  for (let i = 0; i < 40; i++) {
+    const a = rng()*Math.PI*2, r = rng()*hw*0.1;
+    pts.push(Math.cos(a)*r, hh*1.4+(rng()-0.5)*0.15, Math.sin(a)*r);
+    bw.push(1.0);
+  }
+
+  const total = Math.floor(pts.length/3);
+  const positions = new Float32Array(count*3), borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src=(i%total)*3;
+    positions[i*3]=pts[src]; positions[i*3+1]=pts[src+1]; positions[i*3+2]=pts[src+2];
+    borderWeights[i]=bw[i%total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateForceField(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [], bw: number[] = [];
+  const hw = w / 2, hh = h / 2;
+
+  // Outer bright cage — 3 interlocking tilted rings
+  const cageRings = 3;
+  for (let ri = 0; ri < cageRings; ri++) {
+    const tilt = (ri / cageRings) * Math.PI;
+    const ringPts = 120;
+    for (let i = 0; i < ringPts; i++) {
+      const a = (i / ringPts) * Math.PI * 2;
+      const rx = Math.cos(a) * hw;
+      const ry = Math.sin(a) * hh;
+      // Rotate ring by tilt around Y
+      pts.push(rx * Math.cos(tilt), ry + (rng()-0.5)*0.12, rx * Math.sin(tilt) + (rng()-0.5)*0.12);
+      bw.push(1.0);
+    }
+  }
+
+  // Vertical force pillars — 8 evenly spaced
+  const pillars = 8;
+  for (let p = 0; p < pillars; p++) {
+    const angle = (p / pillars) * Math.PI * 2;
+    const px = Math.cos(angle) * hw * 0.72;
+    const pz = Math.sin(angle) * hw * 0.72;
+    const steps = Math.floor(count * 0.04);
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      pts.push(px+(rng()-0.5)*0.08, -hh+t*h*2, pz+(rng()-0.5)*0.08);
+      bw.push(p % 2 === 0 ? 0.8 : 0.0);
+    }
+  }
+
+  // Horizontal scan rings at 4 levels — bright
+  const levels = 4;
+  for (let l = 0; l < levels; l++) {
+    const y = -hh + (l / (levels-1)) * h;
+    const ringPts = 80;
+    for (let i = 0; i < ringPts; i++) {
+      const a = (i / ringPts) * Math.PI * 2;
+      pts.push(Math.cos(a)*hw+(rng()-0.5)*0.1, y+(rng()-0.5)*0.08, Math.sin(a)*hw+(rng()-0.5)*0.1);
+      bw.push(l === 0 || l === levels-1 ? 1.0 : 0.5);
+    }
+  }
+
+  // Spiraling particle helix inside
+  const helixPts = Math.floor(count * 0.25);
+  for (let i = 0; i < helixPts; i++) {
+    const t = i / helixPts;
+    const a = t * Math.PI * 8;
+    const r = hw * 0.4 * (1 - t * 0.3);
+    pts.push(Math.cos(a)*r+(rng()-0.5)*0.15, -hh+t*h, Math.sin(a)*r+(rng()-0.5)*0.15);
+    bw.push(0.2);
+  }
+
+  const total = Math.floor(pts.length/3);
+  const positions = new Float32Array(count*3), borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src = (i%total)*3;
+    positions[i*3]=pts[src]; positions[i*3+1]=pts[src+1]; positions[i*3+2]=pts[src+2];
+    borderWeights[i]=bw[i%total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateHighway(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [];
+  const bw: number[] = [];
+  const hw = w / 2, hh = h / 2, hd = d / 2;
+
+  // Stacked horizontal slab layers — each a flat rectangular ring
+  const layers = Math.max(4, Math.round(h / 2.2));
+  const ptsPerLayer = Math.floor(count / layers);
+
+  for (let l = 0; l < layers; l++) {
+    const y = -hh + (l / (layers - 1)) * h;
+    const shrink = 1.0 - (l / layers) * 0.18;
+    const lw = hw * shrink;
+    const ld = hd * shrink;
+    const borderPts = Math.floor(ptsPerLayer * 0.55);
+    const fillPts = ptsPerLayer - borderPts;
+
+    // Bright border — perimeter of the slab
+    for (let i = 0; i < borderPts; i++) {
+      const t = i / borderPts;
+      let px: number, pz: number;
+      if (t < 0.25)      { px = -lw + t * 4 * lw * 2; pz = -ld; }
+      else if (t < 0.5)  { px = lw;  pz = -ld + (t - 0.25) * 4 * ld * 2; }
+      else if (t < 0.75) { px = lw - (t - 0.5) * 4 * lw * 2; pz = ld; }
+      else               { px = -lw; pz = ld - (t - 0.75) * 4 * ld * 2; }
+      pts.push(px + (rng()-0.5)*0.08, y + (rng()-0.5)*0.12, pz + (rng()-0.5)*0.08);
+      bw.push(1.0);
+    }
+
+    // Faint fill — scattered particles inside the slab
+    for (let i = 0; i < fillPts; i++) {
+      pts.push((rng()-0.5)*lw*1.8, y + (rng()-0.5)*0.3, (rng()-0.5)*ld*1.8);
+      bw.push(0.0);
+    }
+  }
+
+  // Vertical edge columns at 4 corners — connecting the slabs
+  const colPts = Math.floor(count * 0.08);
+  const corners: [number,number][] = [[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]];
+  for (const [cx,cz] of corners) {
+    for (let i = 0; i < colPts / 4; i++) {
+      const y = -hh + rng() * h;
+      pts.push(cx+(rng()-0.5)*0.15, y, cz+(rng()-0.5)*0.15);
+      bw.push(0.8);
+    }
+  }
+
+  const total = Math.floor(pts.length / 3);
+  const positions = new Float32Array(count * 3);
+  const borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src = (i % total) * 3;
+    positions[i*3] = pts[src]; positions[i*3+1] = pts[src+1]; positions[i*3+2] = pts[src+2];
+    borderWeights[i] = bw[i % total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateStrata(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const positions = new Float32Array(count * 3);
+  const borderWeightsArr = new Float32Array(count);
+  const hh = h / 2;
+  let idx = 0;
+
+  const trunkRadius = w * 0.025;
+  const trunkHeight = hh * 1.7;
+  const jitter = 0.04;
+
+  function addSegment(
+    ox: number, oy: number, oz: number,
+    dx: number, dy: number, dz: number,
+    len: number, step: number,
+    startBorder = 0.0, endBorder = 0.0
+  ) {
+    const steps = Math.max(4, Math.floor(len / step));
+    for (let s = 0; s < steps && idx < count; s++) {
+      const t = s / steps;
+      positions[idx * 3]     = ox + dx * len * t + (rng() - 0.5) * jitter;
+      positions[idx * 3 + 1] = oy + dy * len * t + (rng() - 0.5) * jitter * 0.4;
+      positions[idx * 3 + 2] = oz + dz * len * t + (rng() - 0.5) * jitter;
+      borderWeightsArr[idx]  = startBorder + (endBorder - startBorder) * t;
+      idx++;
+    }
+  }
+
+  // Trunk — tight central pillar, tapering toward top, filled with multiple passes
+  const trunkCount = Math.floor(count * 0.28);
+  const trunkSteps = Math.max(16, Math.floor(trunkHeight / 0.2));
+  const trunkPasses = 3;
+  for (let pass = 0; pass < trunkPasses && idx < trunkCount; pass++) {
+    for (let s = 0; s < trunkSteps && idx < count && idx < trunkCount; s++) {
+      const t = s / trunkSteps;
+      const r = trunkRadius * (1 - t * 0.65);
+      const angle = rng() * Math.PI * 2;
+      const pr = Math.sqrt(rng()) * r;
+      positions[idx * 3]     = Math.cos(angle) * pr;
+      positions[idx * 3 + 1] = -hh * 0.55 + t * trunkHeight;
+      positions[idx * 3 + 2] = Math.sin(angle) * pr;
+      idx++;
+    }
+  }
+
+  // Branches — fractal splits in 3 levels, evenly spaced angles
+  const branchCount = Math.floor(count * 0.44);
+  const branchStart = idx;
+
+  // Level 1 — 5 main branches, evenly distributed, starting from 55% up trunk
+  const mainBranches = 5;
+  const level1Top = -hh * 0.55 + trunkHeight * 0.52;
+  for (let b = 0; b < mainBranches && idx < branchStart + branchCount * 0.45; b++) {
+    const baseAngle = (b / mainBranches) * Math.PI * 2;
+    const tiltUp = 0.42 + rng() * 0.15;
+    const branchLen = w * (0.32 + rng() * 0.14);
+    const bx = Math.cos(baseAngle);
+    const bz = Math.sin(baseAngle);
+    const startY = level1Top + b * (trunkHeight * 0.06);
+    addSegment(0, startY, 0, bx, tiltUp, bz, branchLen, 0.18, 0.1, 1.0);
+
+    // Level 2 — 2 sub-branches per main branch, tighter angular spread
+    const subBranches = 2;
+    for (let sb = 0; sb < subBranches && idx < branchStart + branchCount * 0.80; sb++) {
+      const subAngle = baseAngle + (sb === 0 ? -0.55 : 0.55);
+      const subTilt = tiltUp + 0.18 + rng() * 0.12;
+      const subLen = branchLen * (0.48 + rng() * 0.14);
+      const sbx = Math.cos(subAngle);
+      const sbz = Math.sin(subAngle);
+      const splitT = 0.45 + rng() * 0.2;
+      const subOx = bx * branchLen * splitT;
+      const subOy = startY + tiltUp * branchLen * splitT;
+      const subOz = bz * branchLen * splitT;
+      addSegment(subOx, subOy, subOz, sbx, subTilt, sbz, subLen, 0.18, 0.2, 1.0);
+
+      // Level 3 — 2 tight tip branches
+      for (let tb = 0; tb < 2 && idx < branchStart + branchCount; tb++) {
+        const tipAngle = subAngle + (tb === 0 ? -0.45 : 0.45);
+        const tipTilt = subTilt + 0.12 + rng() * 0.1;
+        const tipLen = subLen * (0.42 + rng() * 0.14);
+        const tipSplitT = 0.5 + rng() * 0.2;
+        const tipOx = subOx + sbx * subLen * tipSplitT;
+        const tipOy = subOy + subTilt * subLen * tipSplitT;
+        const tipOz = subOz + sbz * subLen * tipSplitT;
+        addSegment(tipOx, tipOy, tipOz, Math.cos(tipAngle), tipTilt, Math.sin(tipAngle), tipLen, 0.18, 0.3, 1.0);
+      }
+    }
+  }
+
+  // Roots — 6 evenly-spaced primary roots, shallow dip, tight sub-root spread
+  const rootCount = Math.floor(count * 0.24);
+  const rootStart = idx;
+  const rootBranches = 6;
+  const rootBaseY = -hh * 0.55;
+  for (let r = 0; r < rootBranches && idx < rootStart + rootCount * 0.65; r++) {
+    const rootAngle = (r / rootBranches) * Math.PI * 2;
+    const rootLen = w * (0.38 + rng() * 0.22);
+    const dip = -(0.055 + rng() * 0.065);
+    const rx = Math.cos(rootAngle);
+    const rz = Math.sin(rootAngle);
+    addSegment(0, rootBaseY, 0, rx, dip, rz, rootLen, 0.18, 0.2, 0.8);
+
+    // Sub-roots — 2 per main root, tight spread
+    for (let sr = 0; sr < 2 && idx < rootStart + rootCount; sr++) {
+      const srAngle = rootAngle + (sr === 0 ? -0.4 : 0.4);
+      const srLen = rootLen * (0.42 + rng() * 0.2);
+      const srDip = dip - rng() * 0.04;
+      const splitT = 0.35 + rng() * 0.25;
+      const srOx = rx * rootLen * splitT;
+      const srOy = rootBaseY + dip * rootLen * splitT;
+      const srOz = rz * rootLen * splitT;
+      addSegment(srOx, srOy, srOz, Math.cos(srAngle), srDip, Math.sin(srAngle), srLen, 0.18, 0.1, 0.7);
+    }
+  }
+
+  // Minimal atmospheric scatter
+  while (idx < count) {
+    const angle = rng() * Math.PI * 2;
+    const r = w * rng() * 0.18;
+    positions[idx * 3]     = Math.cos(angle) * r;
+    positions[idx * 3 + 1] = -hh * 0.1 + trunkHeight * (0.55 + rng() * 0.5);
+    positions[idx * 3 + 2] = Math.sin(angle) * r;
+    borderWeightsArr[idx]  = 0.0;
+    idx++;
+  }
+
+  // Bright trunk core outline — tight bright spine particles at trunk edges
+  const spineSteps = 60;
+  for (let s = 0; s < spineSteps && idx < count; s++) {
+    const t = s / spineSteps;
+    const angle = t * Math.PI * 2;
+    const r = trunkRadius * (1 - t * 0.65);
+    positions[idx*3]   = Math.cos(angle) * r * 1.1;
+    positions[idx*3+1] = -hh*0.55 + t * trunkHeight;
+    positions[idx*3+2] = Math.sin(angle) * r * 1.1;
+    borderWeightsArr[idx] = t > 0.85 ? 1.0 : 0.6;
+    idx++;
+  }
+
+  // Bright branch tips
+  const tipPositions: [number,number,number,number][] = [];
+  const tip1Top = -hh*0.55 + trunkHeight * 0.52 + 5 * trunkHeight * 0.06;
+  for (let b = 0; b < 5; b++) {
+    const ba = (b/5)*Math.PI*2;
+    const bLen = w * 0.42;
+    const bTilt = 0.5;
+    tipPositions.push([
+      Math.cos(ba)*bLen*0.9, tip1Top + bTilt*bLen*0.9, Math.sin(ba)*bLen*0.9, 1.0
+    ]);
+  }
+  for (const [tx,ty,tz,tb] of tipPositions) {
+    if (idx >= count) break;
+    for (let k = 0; k < 8 && idx < count; k++) {
+      positions[idx*3]   = tx+(rng()-0.5)*0.25;
+      positions[idx*3+1] = ty+(rng()-0.5)*0.25;
+      positions[idx*3+2] = tz+(rng()-0.5)*0.25;
+      borderWeightsArr[idx] = tb;
+      idx++;
+    }
+  }
+
+  // Merge into typed array with borderWeights
+  const borderWeights = borderWeightsArr;
+  return { positions, borderWeights };
+}
+
+function generatePolyhedron(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [], bw: number[] = [];
+  const hw = w/2, hh = h/2;
+  const R = Math.max(hw, hh);
+
+  // Outer bright icosahedral shell — points on sphere surface
+  const shellPts = Math.floor(count * 0.35);
+  for (let i = 0; i < shellPts; i++) {
+    const t = i / shellPts;
+    const phi = Math.acos(1 - 2*t);
+    const theta = t * Math.PI * (3 + Math.sqrt(5)) * 20;
+    const jitter = 0.92 + rng() * 0.16;
+    pts.push(
+      Math.sin(phi)*Math.cos(theta)*R*jitter,
+      Math.cos(phi)*R*(hh/hw)*jitter,
+      Math.sin(phi)*Math.sin(theta)*R*jitter
+    );
+    bw.push(jitter > 1.0 ? 1.0 : 0.7);
+  }
+
+  // Inner drone swarm — orbiting cluster clouds at 3 radii
+  const swarmRadii = [R*0.25, R*0.5, R*0.75];
+  for (const sr of swarmRadii) {
+    const swarmPts = Math.floor(count * 0.15);
+    for (let i = 0; i < swarmPts; i++) {
+      const a = rng() * Math.PI * 2;
+      const b = rng() * Math.PI;
+      pts.push(
+        Math.sin(b)*Math.cos(a)*sr+(rng()-0.5)*0.3,
+        Math.cos(b)*sr*(hh/hw)+(rng()-0.5)*0.3,
+        Math.sin(b)*Math.sin(a)*sr+(rng()-0.5)*0.3
+      );
+      bw.push(sr === R*0.75 ? 0.4 : 0.0);
+    }
+  }
+
+  // Bright equatorial ring
+  const ringPts = 100;
+  for (let i = 0; i < ringPts; i++) {
+    const a = (i/ringPts)*Math.PI*2;
+    pts.push(Math.cos(a)*R+(rng()-0.5)*0.1, (rng()-0.5)*hh*0.25, Math.sin(a)*R+(rng()-0.5)*0.1);
+    bw.push(1.0);
+  }
+  // Polar axis beam
+  for (let i = 0; i < 60; i++) {
+    const t = i/60;
+    pts.push((rng()-0.5)*0.18, -hh+t*h*2.2, (rng()-0.5)*0.18);
+    bw.push(t > 0.85 ? 1.0 : 0.2);
+  }
+
+  const total = Math.floor(pts.length/3);
+  const positions = new Float32Array(count*3), borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src = (i%total)*3;
+    positions[i*3]=pts[src]; positions[i*3+1]=pts[src+1]; positions[i*3+2]=pts[src+2];
+    borderWeights[i]=bw[i%total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateTessellation(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [];
+  const bw: number[] = [];
+  const R = Math.max(w, d) / 2;
+  const hh = h / 2;
+
+  // Hexagonal dome — 6 sides, stacked rings from base to apex
+  const rings = Math.max(4, Math.round(R / 2.2));
+  const hexAngles = Array.from({length: 6}, (_, i) => (i / 6) * Math.PI * 2);
+
+  for (let ri = 0; ri <= rings; ri++) {
+    const t = ri / rings;
+    const ringR = R * (1 - t * 0.85); // taper toward top
+    const ringY = -hh + t * h;
+    const isBorder = ri === 0 || ri === rings;
+    const ptsPerRing = Math.max(6, Math.round(count * 0.04));
+
+    // Hex perimeter for this ring level
+    for (let hi = 0; hi < 6; hi++) {
+      const a0 = hexAngles[hi];
+      const a1 = hexAngles[(hi + 1) % 6];
+      const steps = Math.max(4, Math.round(ptsPerRing / 6));
+      for (let s = 0; s <= steps; s++) {
+        const u = s / steps;
+        const px = (Math.cos(a0) * (1-u) + Math.cos(a1) * u) * ringR;
+        const pz = (Math.sin(a0) * (1-u) + Math.sin(a1) * u) * ringR;
+        pts.push(px+(rng()-0.5)*0.1, ringY+(rng()-0.5)*0.1, pz+(rng()-0.5)*0.1);
+        bw.push(isBorder || ri % 2 === 0 ? 1.0 : 0.1);
+      }
+    }
+  }
+
+  // Interior volume fill
+  const fillCount = Math.floor(count * 0.35);
+  for (let i = 0; i < fillCount; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = Math.sqrt(rng()) * R * 0.8;
+    const y = -hh + rng() * h;
+    pts.push(Math.cos(a)*r+(rng()-0.5)*0.2, y, Math.sin(a)*r+(rng()-0.5)*0.2);
+    bw.push(0.0);
+  }
+
+  // Bright outer shell ring at equator
+  const shellPts = Math.floor(count * 0.12);
+  for (let i = 0; i < shellPts; i++) {
+    const a = (i / shellPts) * Math.PI * 2;
+    pts.push(Math.cos(a)*R+(rng()-0.5)*0.15, (rng()-0.5)*hh*0.4, Math.sin(a)*R+(rng()-0.5)*0.15);
+    bw.push(1.0);
+  }
+
+  const total = Math.floor(pts.length / 3);
+  const positions = new Float32Array(count * 3);
+  const borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src = (i % total) * 3;
+    positions[i*3] = pts[src]; positions[i*3+1] = pts[src+1]; positions[i*3+2] = pts[src+2];
+    borderWeights[i] = bw[i % total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateDataTower(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [];
+  const bw: number[] = [];
+  const hw = w / 2, hh = h / 2;
+
+  // Central bright spine
+  const spinePts = Math.floor(count * 0.12);
+  for (let i = 0; i < spinePts; i++) {
+    const y = -hh + rng() * h;
+    pts.push((rng()-0.5)*0.2, y, (rng()-0.5)*0.2);
+    bw.push(1.0);
+  }
+
+  // Data rain columns — evenly spaced in a grid, particles fall downward
+  const cols = Math.max(3, Math.round(w / 2.5));
+  const rows = Math.max(3, Math.round(d / 2.5));
+  const colPts = Math.floor(count * 0.72 / (cols * rows));
+  for (let ci = 0; ci < cols; ci++) {
+    for (let ri = 0; ri < rows; ri++) {
+      const cx = -hw + (ci / (cols-1)) * w;
+      const cz = -hw + (ri / (rows-1)) * w;
+      const isEdge = ci === 0 || ci === cols-1 || ri === 0 || ri === rows-1;
+      for (let p = 0; p < colPts; p++) {
+        const y = -hh + rng() * h;
+        pts.push(cx+(rng()-0.5)*0.3, y, cz+(rng()-0.5)*0.3);
+        bw.push(isEdge ? 1.0 : 0.0);
+      }
+    }
+  }
+
+  // Top cap — bright horizontal ring
+  const capPts = Math.floor(count * 0.08);
+  for (let i = 0; i < capPts; i++) {
+    const a = (i / capPts) * Math.PI * 2;
+    pts.push(Math.cos(a)*hw*0.9+(rng()-0.5)*0.15, hh+(rng()-0.5)*0.2, Math.sin(a)*hw*0.9+(rng()-0.5)*0.15);
+    bw.push(1.0);
+  }
+
+  // Bottom base ring
+  const basePts = Math.floor(count * 0.08);
+  for (let i = 0; i < basePts; i++) {
+    const a = (i / basePts) * Math.PI * 2;
+    pts.push(Math.cos(a)*hw+(rng()-0.5)*0.15, -hh+(rng()-0.5)*0.2, Math.sin(a)*hw+(rng()-0.5)*0.15);
+    bw.push(1.0);
+  }
+
+  const total = Math.floor(pts.length / 3);
+  const positions = new Float32Array(count * 3);
+  const borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src = (i % total) * 3;
+    positions[i*3] = pts[src]; positions[i*3+1] = pts[src+1]; positions[i*3+2] = pts[src+2];
+    borderWeights[i] = bw[i % total];
+  }
+  return { positions, borderWeights };
+}
+
+function generateCrystalLattice(rng: () => number, w: number, h: number, d: number, count: number): { positions: Float32Array; borderWeights: Float32Array } {
+  const pts: number[] = [], bw: number[] = [];
+  const hw = w/2, hh = h/2, hd = d/2;
+  const gx = Math.max(2, Math.round(w/3.5));
+  const gy = Math.max(2, Math.round(h/3.5));
+  const gz = Math.max(2, Math.round(d/3.5));
+
+  function addStrut(ax: number, ay: number, az: number, bx: number, by: number, bz: number, steps: number, border: number) {
+    for (let s = 0; s <= steps; s++) {
+      const t = s/steps;
+      pts.push(ax+(bx-ax)*t+(rng()-0.5)*0.06, ay+(by-ay)*t+(rng()-0.5)*0.06, az+(bz-az)*t+(rng()-0.5)*0.06);
+      bw.push(border);
+    }
+  }
+  function addNode(nx: number, ny: number, nz: number, border: number) {
+    for (let k = 0; k < 6; k++) {
+      pts.push(nx+(rng()-0.5)*0.18, ny+(rng()-0.5)*0.18, nz+(rng()-0.5)*0.18);
+      bw.push(border);
+    }
+  }
+
+  const ss = 8;
+  for (let ix = 0; ix <= gx; ix++)
+    for (let iy = 0; iy <= gy; iy++)
+      for (let iz = 0; iz <= gz; iz++) {
+        const ax = -hw+ix*(w/gx), ay = -hh+iy*(h/gy), az = -hd+iz*(d/gz);
+        const onEdge = (ix===0||ix===gx) && (iy===0||iy===gy);
+        addNode(ax, ay, az, onEdge ? 1.0 : 0.2);
+        if (ix<gx) addStrut(ax,ay,az, ax+w/gx,ay,az, ss, iy===0||iy===gy ? 1.0 : 0.1);
+        if (iy<gy) addStrut(ax,ay,az, ax,ay+h/gy,az, ss, ix===0||ix===gx ? 1.0 : 0.1);
+        if (iz<gz) addStrut(ax,ay,az, ax,ay,az+d/gz, ss, 0.1);
+      }
+  // XY diagonals
+  for (let ix = 0; ix < gx; ix++)
+    for (let iy = 0; iy < gy; iy++)
+      for (let iz = 0; iz <= gz; iz += Math.max(1,Math.floor(gz/2))) {
+        const ax=-hw+ix*(w/gx), ay=-hh+iy*(h/gy), az=-hd+iz*(d/gz);
+        addStrut(ax,ay,az, ax+w/gx,ay+h/gy,az, ss, 0.6);
+        addStrut(ax+w/gx,ay,az, ax,ay+h/gy,az, ss, 0.6);
+      }
+
+  const total = Math.floor(pts.length/3);
+  const positions = new Float32Array(count*3), borderWeights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const src=(i%total)*3;
+    positions[i*3]=pts[src]; positions[i*3+1]=pts[src+1]; positions[i*3+2]=pts[src+2];
+    borderWeights[i]=bw[i%total];
+  }
+  return { positions, borderWeights };
+}
+
+export function buildNodeStructure(node: ArchitectureNode): StrandBundle {
+  const seed = hashSeed(node.id);
+  const rng = seededRandom(seed);
+  const SCALE = 1.75;
+  const [w, h, d] = node.size;
+  const width  = Math.max(3, w) * SCALE;
+  const height = Math.max(5, h) * SCALE;
+  const depth  = Math.max(3, d) * SCALE;
+  const count = densityFor(node);
+  const primary = nodeColor(node.type, hashSeed(node.id));
+
+  switch (node.type) {
+    case 'database':       return generateMonolithStrands(rng, width, height, depth, count, primary);
+    case 'api':            return generateHexSpiresStrands(rng, width, height, depth, count, primary);
+    case 'service':        return generateDataTowerStrands(rng, width, height, depth, count, primary);
+    case 'authentication': return generateForceFieldStrands(rng, width, height, depth, count, primary);
+    case 'middleware':     return generateHighwayStrands(rng, width, height, depth, count, primary);
+    case 'logger':         return generateStrataStrands(rng, width, height, depth, count, primary);
+    case 'agent':          return generatePolyhedronStrands(rng, width, height, depth, count, primary);
+    case 'component':      return generateTessellationStrands(rng, width, height, depth, count, primary);
+    case 'utility':        return generateCrystalLatticeStrands(rng, width, height, depth, count, primary);
+    default:               return generateTessellationStrands(rng, width, height, depth, count, primary);
+  }
+}
+
+function terrainHeightForStream(_x: number, _z: number): number {
+  return -2; // flat floor
+}
+
+export function buildEdgeStream(
+  start: [number, number, number],
+  _mid: [number, number, number],
+  end: [number, number, number],
+  weight: number,
+) {
+  const FLOOR_OFFSET = 0.4;
+  const LANE_GAP = 0.22;
+  const DOT_COUNT = 18;  // junction dot cluster size
+  const PAD_COUNT = 24;  // terminal pad cluster size
+
+  // Build orthogonal waypoints: start → h-turn → v-turn → end
+  // Two possible routes: H-first or V-first, pick based on longer axis
+  const dx = end[0] - start[0];
+  const dz = end[2] - start[2];
+
+  // Midpoint split — add one intermediate horizontal jog for the multi-turn look
+  const midX = start[0] + dx * 0.5;
+  const midZ = start[2];
+  const mid2X = start[0] + dx * 0.5;
+  const mid2Z = end[2];
+
+  // Waypoints: start → (midX, startZ) → (midX, endZ) → end  [Z-route]
+  const waypoints: [number, number][] = [
+    [start[0], start[2]],
+    [midX,     midZ],
+    [mid2X,    mid2Z],
+    [end[0],   end[2]],
+  ];
+
+  // Calculate segment lengths
+  const segments: { ax: number; az: number; bx: number; bz: number; len: number }[] = [];
+  let totalLen = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const [ax, az] = waypoints[i];
+    const [bx, bz] = waypoints[i + 1];
+    const len = Math.abs(bx - ax) + Math.abs(bz - az) + 0.001;
+    segments.push({ ax, az, bx, bz, len });
+    totalLen += len;
+  }
+
+  const baseCount = Math.max(320, Math.floor(420 + weight * 80));
+  // Extra for junctions + pads
+  const junctionCount = (waypoints.length - 2) * DOT_COUNT;
+  const padCount = 2 * PAD_COUNT;
+  const count = baseCount + junctionCount + padCount;
+  const positions = new Float32Array(count * 3);
+  let idx = 0;
+
+  // Helper: emit a trace segment with 3 parallel lanes
+  function emitSegment(ax: number, az: number, bx: number, bz: number, nPts: number) {
+    const isHoriz = Math.abs(bx - ax) >= Math.abs(bz - az);
+    for (let i = 0; i < nPts && idx < count; i++) {
+      const t = i / (nPts - 1 || 1);
+      const x = ax + (bx - ax) * t;
+      const z = az + (bz - az) * t;
+      const y = terrainHeightForStream(x, z) + FLOOR_OFFSET;
+      const lane = (i % 3 - 1) * LANE_GAP;
+      positions[idx * 3]     = x + (isHoriz ? 0 : lane);
+      positions[idx * 3 + 1] = y;
+      positions[idx * 3 + 2] = z + (isHoriz ? lane : 0);
+      idx++;
+    }
+  }
+
+  // Helper: emit a junction dot cluster (bright pad at corner)
+  function emitJunction(x: number, z: number, nPts: number) {
+    const y = terrainHeightForStream(x, z) + FLOOR_OFFSET;
+    for (let i = 0; i < nPts && idx < count; i++) {
+      const a = (i / nPts) * Math.PI * 2;
+      const r = 0.3 + (i % 4) * 0.18;
+      positions[idx * 3]     = x + Math.cos(a) * r;
+      positions[idx * 3 + 1] = y + (i % 2) * 0.08;
+      positions[idx * 3 + 2] = z + Math.sin(a) * r;
+      idx++;
+    }
+  }
+
+  // Emit each segment proportionally
+  for (const seg of segments) {
+    const nPts = Math.max(4, Math.round(baseCount * seg.len / totalLen));
+    emitSegment(seg.ax, seg.az, seg.bx, seg.bz, nPts);
+  }
+
+  // Junction dots at interior waypoints (the 90° corners)
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    emitJunction(waypoints[i][0], waypoints[i][1], DOT_COUNT);
+  }
+
+  // Terminal pads at start and end
+  emitJunction(start[0], start[2], PAD_COUNT);
+  emitJunction(end[0],   end[2],   PAD_COUNT);
+
+  return { positions, count };
+}
+
+export function getTypeColor(type: ArchitectureType, nodeId?: string): [number, number, number] {
+  const color = nodeColor(type, nodeId ? hashSeed(nodeId) : TYPE_BIAS[type] * 1337);
+  return [color[0], color[1], color[2]];
+}
+
