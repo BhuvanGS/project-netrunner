@@ -1209,3 +1209,202 @@ body {
 .warning-cancel:hover {
   background: rgba(80, 80, 80, 0.18);
 }
+
+/* ── Cyber Outro Sequence ────────────────────────────────────────────────── */
+.cyber-outro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000105;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  animation: outro-fade-in 100ms ease forwards;
+}
+
+@keyframes outro-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.outro-terminal {
+  width: 640px;
+  max-width: 90vw;
+  border: 1px solid rgba(255, 50, 50, 0.35);
+  background: linear-gradient(180deg, rgba(24, 2, 2, 0.88), rgba(10, 0, 0, 0.92));
+  box-shadow:
+    0 0 0 1px rgba(255, 120, 120, 0.08),
+    0 0 40px rgba(220, 50, 50, 0.22),
+    inset 0 1px 0 rgba(255, 180, 180, 0.12);
+  backdrop-filter: blur(4px);
+  font-family: 'Courier New', 'Consolas', monospace;
+  position: relative;
+}
+
+.outro-terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 50, 50, 0.24);
+  background: linear-gradient(90deg, rgba(210, 50, 50, 0.22), rgba(60, 10, 10, 0.36));
+}
+
+.outro-terminal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.outro-terminal-dot-red {
+  background: #ff5963;
+  box-shadow: 0 0 8px rgba(255, 89, 99, 0.62);
+}
+
+.outro-terminal-dot-amber {
+  background: #ffcb45;
+  box-shadow: 0 0 8px rgba(255, 203, 69, 0.48);
+}
+
+.outro-terminal-dot-cyan {
+  background: #00e7ff;
+  box-shadow: 0 0 10px rgba(0, 231, 255, 0.5);
+}
+
+.outro-terminal-title {
+  margin-left: 0.35rem;
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  color: rgba(255, 170, 170, 0.92);
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(230, 50, 50, 0.34);
+}
+
+.outro-terminal-body {
+  padding: 1.25rem 1rem;
+  min-height: 200px;
+}
+
+.outro-line {
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: rgba(255, 130, 130, 0.85);
+  white-space: pre-wrap;
+  opacity: 0;
+  animation: outro-line-in 80ms ease forwards;
+}
+
+.outro-line-glitch {
+  color: rgba(255, 50, 50, 0.95);
+  text-shadow: 0 0 8px rgba(255, 50, 50, 0.5);
+  animation: outro-line-in 80ms ease forwards, outro-glitch-text 200ms steps(2) infinite;
+}
+
+.outro-line-fail {
+  color: rgba(255, 80, 80, 0.9);
+  text-shadow: 0 0 10px rgba(255, 60, 60, 0.6);
+}
+
+.outro-line-ok {
+  color: rgba(141, 255, 101, 0.85);
+  text-shadow: 0 0 8px rgba(141, 255, 101, 0.3);
+}
+
+.outro-line-dim {
+  color: rgba(255, 130, 130, 0.35);
+}
+
+@keyframes outro-line-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes outro-glitch-text {
+  0% { clip-path: inset(0 0 70% 0); transform: translateX(-1px); }
+  25% { clip-path: inset(30% 0 40% 0); transform: translateX(1px); }
+  50% { clip-path: inset(60% 0 10% 0); transform: translateX(-1px); }
+  75% { clip-path: inset(20% 0 50% 0); transform: translateX(1px); }
+  100% { clip-path: inset(0 0 70% 0); transform: translateX(0); }
+}
+
+.outro-static-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 4px);
+  animation: outro-static-build 2.5s ease-in forwards;
+  mix-blend-mode: overlay;
+}
+
+@keyframes outro-static-build {
+  0% { opacity: 0; }
+  40% { opacity: 0.12; }
+  70% { opacity: 0.35; }
+  100% { opacity: 0.65; }
+}
+
+.outro-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 30%, rgba(0,0,0,0.4) 70%, rgba(0,0,0,0.9) 100%);
+  opacity: 0;
+  animation: outro-vignette-build 3s ease-in forwards;
+}
+
+@keyframes outro-vignette-build {
+  0% { opacity: 0; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+.outro-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.2) 2px,
+    rgba(0, 0, 0, 0.2) 4px
+  );
+  z-index: 101;
+}
+
+.outro-crt-off {
+  position: absolute;
+  inset: 0;
+  background: #000105;
+  opacity: 0;
+  animation: outro-crt-off 0.6s ease-in 2.8s forwards;
+  z-index: 102;
+}
+
+@keyframes outro-crt-off {
+  0% {
+    opacity: 0;
+    transform: scaleY(1);
+  }
+  30% {
+    opacity: 0.4;
+    transform: scaleY(0.98);
+  }
+  60% {
+    opacity: 0.85;
+    transform: scaleY(0.015);
+    filter: brightness(2);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(0);
+    filter: brightness(0.5);
+  }
+}

@@ -1,10 +1,12 @@
 import { existsSync } from 'fs';
+import fs from 'fs';
 import { mkdtemp, readFile, readdir, rm } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { parse } from '@babel/parser';
 import traverse from '@babel/traverse';
-import simpleGit from 'simple-git';
+import git from 'isomorphic-git';
+import http from 'isomorphic-git/http/node';
 import { layoutArchitectureNodes } from '@/lib/city-layout';
 import { mockArchitectureGraph } from '@/lib/mock-graph';
 import type {
@@ -66,7 +68,14 @@ export async function analyzeRepository(repoUrl: string, force = false): Promise
   const repoPath = path.join(workspace, repoName);
 
   try {
-    await simpleGit().clone(repoUrl, repoPath, ['--depth', '1']);
+    await git.clone({
+      fs,
+      http,
+      dir: repoPath,
+      url: repoUrl,
+      depth: 1,
+      singleBranch: true,
+    });
     await assertSupportedRepository(repoPath);
 
     const sourcePaths = await collectSourceFiles(repoPath);
@@ -74,7 +83,10 @@ export async function analyzeRepository(repoUrl: string, force = false): Promise
 
     return buildArchitectureGraph(repoUrl, repoName, internalFiles);
   } catch (err) {
-    if (force && err instanceof Error && /auth|credentials|permission/i.test(err.message)) {
+    const isAuthError =
+      err instanceof Error &&
+      /auth|credentials|permission|401|403|404|ENOTFOUND|ECONNREFUSED/i.test(err.message);
+    if (force && isAuthError) {
       // ICE bypass failed — return simulated data for the private repo
       return {
         ...mockArchitectureGraph,

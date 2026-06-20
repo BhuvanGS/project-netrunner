@@ -16,7 +16,7 @@ export function NetrunnerConsole() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [icePending, setIcePending] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'console' | 'boot' | 'cyberspace'>('console');
+  const [viewMode, setViewMode] = useState<'console' | 'boot' | 'cyberspace' | 'outro'>('console');
   const [emergePhase, setEmergePhase] = useState(0);
   const [bootFading, setBootFading] = useState(false);
   const [glitchPhase, setGlitchPhase] = useState(false);
@@ -176,7 +176,27 @@ export function NetrunnerConsole() {
             onBlackwallDeath={handleBlackwallDeath}
           />
           <InspectionPanel node={selectedNode} />
+          {viewMode === 'cyberspace' && (
+            <button
+              onClick={() => {
+                clearBootTimers();
+                setShowWarning(false);
+                setViewMode('outro');
+              }}
+              className='fixed right-4 top-4 z-50 rounded border border-red-500/20 bg-[#05080e]/90 px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-red-300 backdrop-blur-sm transition hover:border-red-500/40 hover:text-red-100'
+            >
+              [exit cyberspace]
+            </button>
+          )}
         </>
+      )}
+
+      {viewMode === 'outro' && (
+        <CyberOutroSequence
+          onComplete={() => {
+            setViewMode('console');
+          }}
+        />
       )}
 
       {showWarning && (
@@ -204,6 +224,72 @@ export function NetrunnerConsole() {
         </div>
       )}
     </main>
+  );
+}
+
+const OUTRO_LINES = [
+  { text: '[DISCONNECT] Neural link handshake interrupted...', delay: 0, style: '' },
+  { text: '[WARN] Signal degradation detected — 78%', delay: 180, style: '' },
+  { text: '[WARN] Signal degradation detected — 45%', delay: 360, style: '' },
+  { text: '[WARN] Signal degradation detected — 12%', delay: 520, style: '' },
+  { text: '[ERROR] Stream integrity failure — sector 0x7F3A', delay: 700, style: 'outro-line-fail' },
+  { text: '[FAIL] Blackwall fragment collision — evasive abort', delay: 880, style: 'outro-line-glitch' },
+  { text: '', delay: 1000, style: '' },
+  { text: '[SYS] Flushing neural buffers...', delay: 1150, style: 'outro-line-dim' },
+  { text: '[SYS] Purging session cache...', delay: 1300, style: 'outro-line-dim' },
+  { text: '[SYS] Zeroing architecture graph...', delay: 1450, style: 'outro-line-dim' },
+  { text: '', delay: 1600, style: '' },
+  { text: '[OK] Safe disconnect confirmed', delay: 1750, style: 'outro-line-ok' },
+  { text: '[OK] Neural buffers flushed — 0x0000', delay: 1900, style: 'outro-line-ok' },
+  { text: '', delay: 2050, style: '' },
+  { text: 'Neural link severed. See you in the shadows, netrunner.', delay: 2200, style: '' },
+];
+
+function CyberOutroSequence({ onComplete }: { onComplete: () => void }) {
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  useEffect(() => {
+    const timers: number[] = [];
+    OUTRO_LINES.forEach((line, i) => {
+      const t = window.setTimeout(() => setVisibleCount((c) => c + 1), line.delay);
+      timers.push(t);
+    });
+    const done = window.setTimeout(onComplete, 3600);
+    timers.push(done);
+    return () => timers.forEach(window.clearTimeout);
+  }, [onComplete]);
+
+  return (
+    <div className='cyber-outro-overlay'>
+      <div className='outro-terminal'>
+        <div className='outro-terminal-header'>
+          <span className='outro-terminal-dot outro-terminal-dot-red' />
+          <span className='outro-terminal-dot outro-terminal-dot-amber' />
+          <span className='outro-terminal-dot outro-terminal-dot-cyan' />
+          <span className='outro-terminal-title'>[KERNEL::OUTRO] /dev/neural-link :: SESSION_TEARDOWN</span>
+        </div>
+        <div className='outro-terminal-body'>
+          {OUTRO_LINES.slice(0, visibleCount).map((line, i) => (
+            <div
+              key={i}
+              className={`outro-line ${line.style}`}
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              {line.text}
+            </div>
+          ))}
+          {visibleCount < OUTRO_LINES.length && (
+            <span className='boot-cursor' aria-hidden='true'>
+              █
+            </span>
+          )}
+        </div>
+        <div className='outro-static-overlay' />
+        <div className='outro-scanlines' />
+      </div>
+      <div className='outro-vignette' />
+      <div className='outro-crt-off' />
+    </div>
   );
 }
 

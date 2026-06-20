@@ -373,10 +373,10 @@ export function ConsoleLayout({
         </div>
 
         {/* terminal body */}
-        <div className='flex-1 p-4'>
+        <div className='flex-1 p-4 min-h-0'>
           <div
             ref={termRef}
-            className='flex h-full flex-col gap-1 overflow-y-auto rounded border border-red-500/15 bg-[#020408]/80 p-5 text-red-300/80 shadow-[inset_0_0_40px_rgba(255,50,50,0.04)]'
+            className='h-full space-y-1 overflow-y-auto rounded border border-red-500/15 bg-[#020408]/80 p-5 text-red-300/80 shadow-[inset_0_0_40px_rgba(255,50,50,0.04)]'
           >
             {/* command history */}
             {history.map((entry, i) =>

@@ -28,3 +28,4 @@ dist/
 .vercel/
 .turbo/
 .agents
+.vercel
